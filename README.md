@@ -137,7 +137,7 @@ docker compose -f .\compose.yaml exec db psql -U user -d appdb -c "SELECT id,ite
 - ユニットテスト（コンテナ内で実行）
 
 ```powershell
-cd 'C:\Users\agake\Documents\Docker\FastAPI'
+
 # コンテナ内で pytest を実行。PYTHONPATH をセットして `app` パッケージが解決されるようにします。
 docker compose exec backend sh -c "export PYTHONPATH=/app; pytest -q /app/tests -q"
 ```
@@ -145,7 +145,7 @@ docker compose exec backend sh -c "export PYTHONPATH=/app; pytest -q /app/tests 
 - 統合テスト（テスト専用 DB を使う — Compose override を利用）
 
 ```powershell
-cd 'C:\Users\agake\Documents\Docker\FastAPI'
+
 # テスト用 DB を作成（存在しない場合）
 docker compose exec db psql -U user -d postgres -c "CREATE DATABASE IF NOT EXISTS appdb_test;"
 
@@ -167,7 +167,7 @@ docker compose -f compose.yaml -f compose.test.yml down
 テスト用 DB を削除する場合（接続が残っているとエラーになるため、接続を切ってから削除します）:
 
 ```powershell
-cd 'C:\Users\agake\Documents\Docker\FastAPI'
+
 # まず実行中の接続を切る
 docker compose exec db psql -U user -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='appdb_test' AND pid <> pg_backend_pid();"
 
