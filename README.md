@@ -32,6 +32,52 @@ docker compose -f .\compose.yaml logs -f backend
 ## マイグレーション
 - Alembic を使用しています。エントリポイントで `alembic stamp head` → `alembic upgrade head` を実行して DB を最新化します。
 
+## 監査 (Audit)
+バックエンドでは `item_audit` テーブルに操作の監査ログを記録します。現在の実装では `POST /items` によるアイテム作成時に同期的に監査レコードを挿入します。
+
+- 記録される主な項目:
+	- `item_id`: 対象アイテムの ID
+	- `action`: 実行された操作（例: `create`）
+	- `payload`: 操作に関連するデータ（JSON）
+	- `user_id`, `ip`, `method`, `user_agent`, `request_path`（可能な場合）
+
+- 実装上の挙動:
+	- リクエストヘッダ `X-User-Id` があれば `user_id` に保存します（将来の認証導入時に連携予定）。
+	- クライアント IP は `X-Forwarded-For` ヘッダを優先して取得します。
+	- 監査は同期的に DB に書き込まれます（将来的に負荷対策で非同期キューに切り替える予定）。
+
+### 監査の実装変更（重要）
+
+- 変更点: `item_audit` への挿入を手書き SQL テンプレートから SQLAlchemy Core の `insert().values(...).returning(...)` に切り替えました。
+	- 理由: 手書きの SQL で Postgres の型キャスト（例: `::json`）と SQLAlchemy のプレースホルダが混在するとバインド時に構文エラーやパラメータ不整合を起こすためです。Core の挿入を使うことで JSON 等のパラメータが確実にバインドされ、typed カラム（`user_id`, `ip`, `method`, `user_agent`, `request_path`）へ値が確実に書き込まれるようになりました。
+
+### 万一 typed カラムが NULL の行がある場合のバックフィル手順
+
+1. DB コンテナに入る:
+
+```powershell
+docker compose -f .\compose.yaml exec -T db bash
+psql -U user -d appdb
+```
+
+2. payload に格納された値から typed カラムへコピーする SQL（安全なバックフィル）:
+
+```sql
+UPDATE item_audit SET
+	user_id = COALESCE(user_id, payload ->> 'user_id'),
+	ip = COALESCE(ip, payload ->> 'ip'),
+	method = COALESCE(method, payload ->> 'method'),
+	user_agent = COALESCE(user_agent, payload ->> 'user_agent'),
+	request_path = COALESCE(request_path, payload ->> 'request_path')
+WHERE payload IS NOT NULL
+	AND (user_id IS NULL OR ip IS NULL OR method IS NULL OR user_agent IS NULL OR request_path IS NULL);
+
+-- 変更結果を確認
+SELECT id, item_id, payload::text, user_id, ip, method, request_path FROM item_audit WHERE id = <対象ID>;
+```
+
+3. 補足: 上記は既存の行を運用で修正するための手順です。今回のアプリ側変更により新規挿入時には typed カラムが確実に書き込まれますが、古い NULL データが残っている場合はこの SQL を実行してバックフィルしてください。
+
 ## ログ回転（重要）
 バックエンドの `entrypoint.sh` により、`/app/logs`（ホストでは `backend/logs`）内の `*.log` ファイルを対象に簡易ローテーションを行います。
 
