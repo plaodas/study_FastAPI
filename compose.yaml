@@ -8,6 +8,8 @@ services:
     volumes:
       - ./backups:/backups:ro
       - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/appdb
     entrypoint: ["/app/entrypoint.sh"]
 
   frontend:

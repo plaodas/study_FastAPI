@@ -1,28 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wait for DB to be ready
+# DB 接続文字列を環境変数で受け取る想定
+# 例: export DATABASE_URL="postgresql://user:pass@db:5432/appdb"
+
+# 1) DB が起きるまで待つ
+echo "Waiting for DB..."
 until psql "$DATABASE_URL" -c 'SELECT 1;' >/dev/null 2>&1; do
-  echo "Waiting for DB..."
   sleep 1
 done
+echo "DB is ready."
 
-# Check if alembic_version exists
-if ! psql "$DATABASE_URL" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='alembic_version'" | grep -q 1; then
-  echo "No alembic_version table found => treating DB as empty"
+# 2) DB が空（alembic_version が存在しない）かチェック
+ALEMBIC_EXISTS=$(psql "$DATABASE_URL" -tAc "SELECT to_regclass('public.alembic_version');")
+
+if [ -z "$ALEMBIC_EXISTS" ] || [ "$ALEMBIC_EXISTS" = "" ]; then
+  echo "No alembic_version table detected -> treating DB as empty/unnormalized."
+
+  # only restore if backup file exists
   if [ -f /backups/latest.sql ]; then
-    echo "Restoring backup /backups/latest.sql..."
+    echo "Restoring backup from /backups/latest.sql ..."
     psql "$DATABASE_URL" -f /backups/latest.sql
-    echo "Backup restored."
-    # ensure alembic knows current head (if backup included schema but not alembic_version)
-    alembic stamp head
+    echo "Backup restore completed."
+
+    # If backup contained schema but not alembic_version, mark alembic as in-sync.
+    # Use stamp head so alembic won't try to re-run already-applied DDL.
+    if command -v alembic >/dev/null 2>&1; then
+      echo "Stamping alembic head..."
+      alembic stamp head || true
+    fi
   else
-    echo "No backup found. Continuing to run migrations to create schema."
+    echo "No /backups/latest.sql found. Will proceed to run migrations to create schema."
   fi
+else
+  echo "alembic_version table present. Skipping automatic restore."
 fi
 
-# Always apply migrations (idempotent)
-alembic upgrade head
+# 3) Ensure migrations are applied (idempotent)
+if command -v alembic >/dev/null 2>&1; then
+  echo "Running alembic upgrade head..."
+  alembic upgrade head
+fi
 
-# Start the app (example)
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+# 4) Exec main command (passed from Dockerfile/CMD)
+exec "$@"
