@@ -105,7 +105,6 @@ python .\tools\test_rotation.py
 - 環境変数は `compose.yaml` にインラインで記載されていますが、機密情報は環境変数管理（Vault / Docker secrets / Kubernetes secrets 等）を使ってください。
 
 ---
-この README は `README-rotation.md` の内容を統合したものです。さらに詳しい運用手順や PR を希望する場合は指示してください。
 
 ## 検証コマンド（開発用）
 
