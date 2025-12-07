@@ -50,8 +50,8 @@ Thumbs.db
 
 # Environment files (may contain secrets)
 .env
-.env.*
-
+.env.local
+.env.*.local
 # Backups/dumps: keep `latest.sql` but ignore others in backups
 db/backups/*
 !db/backups/latest.sql
