@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware import Middleware
+from app.middleware.validation import ValidationMiddleware
 from pydantic import BaseModel, constr
 import re
 from sqlalchemy import Column, Integer, String, create_engine, Table, MetaData
@@ -23,6 +25,9 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+# Add validation middleware early so requests are sanitized before route handlers
+app.add_middleware(ValidationMiddleware)
+
 # Allow requests from the frontend dev server
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +49,11 @@ def get_db():
 @app.get("/items")
 def read_items(db: Session = Depends(get_db)):
     return db.query(Item).all()
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 # ----- POST: create a new item -----
@@ -78,7 +88,19 @@ else:
 
 
 @app.post("/items", response_model=ItemRead, status_code=201)
-def create_item(item: ItemCreate, request: Request, db: Session = Depends(get_db)):
+async def create_item(request: Request, db: Session = Depends(get_db)):
+    # Prefer validated payload from middleware if present
+    validated = getattr(request.state, "validated_json", None)
+    if validated is None:
+        # fallback: read and validate body here
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON body")
+        validated = payload
+
+    # Use Pydantic model for final validation
+    item = ItemCreate(**validated)
     # server-side sanitization: strip HTML tags and control characters
     def sanitize(s: str) -> str:
         # remove HTML tags
@@ -89,16 +111,7 @@ def create_item(item: ItemCreate, request: Request, db: Session = Depends(get_db
         s = re.sub(r"\s+", " ", s).strip()
         return s
 
-    name_clean = sanitize(item.name)
-
-    # forbidden words (case-insensitive substring match)
-    forbidden = ["spam", "badword"]
-    low = name_clean.lower()
-    for fw in forbidden:
-        if fw in low:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name contains forbidden content")
-
-    db_item = Item(name=name_clean)
+    db_item = Item(name=item.name)
     # add and flush so we have an id assigned before inserting audit
     db.add(db_item)
     db.flush()

@@ -10,7 +10,22 @@ services:
       - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://user:pass@db:5432/appdb
+      - FORBIDDEN_WORDS=spam,badword
+      - VALIDATION_RULES=/items:POST;/api/*:POST
+      - STARTUP_ROTATE_MAX_BYTES=5242880
+      - STARTUP_ROTATE_KEEP=7
+      - STARTUP_ROTATE_INTERVAL=300
     entrypoint: ["/app/entrypoint.sh"]
+    # Ensure the container is started with uvicorn as the command (passed to entrypoint)
+    # run uvicorn and redirect stdout/stderr to /app/logs/uvicorn.log so it is rotated
+    command: ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 >> /app/logs/uvicorn.log 2>&1"]
+    restart: unless-stopped
+    healthcheck:
+      # Use Python which exists inside the image instead of curl
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/health'); sys.exit(0)\" || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   frontend:
     build: ./frontend
