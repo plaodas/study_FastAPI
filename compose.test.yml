@@ -1,0 +1,4 @@
+services:
+  backend:
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/appdb_test

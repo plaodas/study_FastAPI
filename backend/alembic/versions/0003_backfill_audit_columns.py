@@ -4,12 +4,13 @@ Revision ID: 0003_backfill_audit_columns
 Revises: 0002_add_audit_columns
 Create Date: 2025-12-07
 """
+
 from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '0003_backfill_audit_columns'
-down_revision = '0002_add_audit_columns'
+revision = "0003_backfill_audit_columns"
+down_revision = "0002_add_audit_columns"
 branch_labels = None
 depends_on = None
 

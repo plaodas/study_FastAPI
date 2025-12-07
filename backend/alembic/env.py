@@ -18,8 +18,9 @@ if config.config_file_name is not None:
 
 # import your model's MetaData object here
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from app.main import Base, DATABASE_URL
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from app.db import Base, DATABASE_URL
 
 target_metadata = Base.metadata
 
@@ -39,18 +40,13 @@ def run_migrations_offline():
 
 def run_migrations_online():
     connectable = engine_from_config(
-        {
-            'sqlalchemy.url': DATABASE_URL
-        },
-        prefix='sqlalchemy.',
+        {"sqlalchemy.url": DATABASE_URL},
+        prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

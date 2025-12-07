@@ -106,3 +106,72 @@ python .\tools\test_rotation.py
 
 ---
 この README は `README-rotation.md` の内容を統合したものです。さらに詳しい運用手順や PR を希望する場合は指示してください。
+
+## 検証コマンド（開発用）
+
+開発中にコンテナ上で変更のインポート確認やエンドツーエンドの簡易検証を行うためのコマンド例です。
+
+PowerShell（Compose ファイルがルートの `compose.yaml` の場合）:
+
+```powershell
+# コンテナ内でモジュールが正しくインポートできるか確認
+docker compose -f .\compose.yaml exec backend python -c "import app.main; print('IMPORT_OK')"
+
+# backend コンテナ内から POST /items を叩いて作成を検証
+docker compose -f .\compose.yaml exec backend python -c "import http.client, json; conn=http.client.HTTPConnection('127.0.0.1',8000); conn.request('POST','/items', json.dumps({'name':'refactor-check'}), {'Content-Type':'application/json','X-User-Id':'verify-user'}); r=conn.getresponse(); print('STATUS', r.status); print(r.read().decode())"
+
+# ホストから curl で叩く例（ローカルでポートを公開している場合）
+curl -v -X POST http://localhost:8000/items -H "Content-Type: application/json" -d '{"name":"refactor-check"}'
+
+# DB 内の最新の item_audit 行を確認する（psql を使う例）
+docker compose -f .\compose.yaml exec db psql -U user -d appdb -c "SELECT id,item_id,action,payload->>'user_id' AS user_id,payload->>'ip' AS ip,method,user_agent,request_path FROM item_audit ORDER BY id DESC LIMIT 1;"
+```
+
+備考:
+- `X-User-Id` ヘッダはテスト用の任意ヘッダで、監査の `user_id` に保存されます。
+- Compose ファイルのパスやサービス名が異なる場合は適宜 `-f` オプションやサービス名を調整してください。
+
+## テストの実行方法（ユニット / 統合）
+
+以下はこのリポジトリでよく使うテスト実行手順です。Windows PowerShell の例を示します。
+
+- ユニットテスト（コンテナ内で実行）
+
+```powershell
+cd 'C:\Users\agake\Documents\Docker\FastAPI'
+# コンテナ内で pytest を実行。PYTHONPATH をセットして `app` パッケージが解決されるようにします。
+docker compose exec backend sh -c "export PYTHONPATH=/app; pytest -q /app/tests -q"
+```
+
+- 統合テスト（テスト専用 DB を使う — Compose override を利用）
+
+```powershell
+cd 'C:\Users\agake\Documents\Docker\FastAPI'
+# テスト用 DB を作成（存在しない場合）
+docker compose exec db psql -U user -d postgres -c "CREATE DATABASE IF NOT EXISTS appdb_test;"
+
+# オーバーライド付きで backend を起動（compose.test.yml を使って DATABASE_URL を appdb_test に上書き）
+docker compose -f compose.yaml -f compose.test.yml up -d --build backend
+
+# マイグレーションを適用（backend コンテナ内）
+docker compose -f compose.yaml -f compose.test.yml exec backend sh -c "alembic upgrade head"
+
+# 統合テストを実行（INTEGRATION_TEST=1 を渡すことで該当テストが有効になります）
+docker compose -f compose.yaml -f compose.test.yml exec -e INTEGRATION_TEST=1 backend sh -c "pytest -q /app/tests/test_integration_postgres.py::test_integration_postgres -q"
+
+# テストが終わったらテスト用 backend を停止
+docker compose -f compose.yaml -f compose.test.yml down
+```
+
+## テスト用 DB (`appdb_test`) の削除コマンド
+
+テスト用 DB を削除する場合（接続が残っているとエラーになるため、接続を切ってから削除します）:
+
+```powershell
+cd 'C:\Users\agake\Documents\Docker\FastAPI'
+# まず実行中の接続を切る
+docker compose exec db psql -U user -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='appdb_test' AND pid <> pg_backend_pid();"
+
+# DB を削除
+docker compose exec db psql -U user -d postgres -c "DROP DATABASE IF EXISTS appdb_test;"
+```

@@ -121,6 +121,48 @@ if command -v alembic >/dev/null 2>&1; then
   fi
 fi
 
+# 3b) Ensure required tables exist even if alembic_version indicates head
+# There are scenarios where a DB was stamped or otherwise marked as having
+# migrations applied while some DDL is missing (e.g. partial restore from
+# backups). To be resilient, check critical tables and create them when
+# absent. Keep this lightweight and idempotent.
+ensure_table() {
+  local tbl=$1
+  local create_sql=$2
+  # use psql against DATABASE_URL; tolerate transient failures
+  n=0
+  until [ "$n" -ge 5 ]; do
+    if psql "$DATABASE_URL" -tAc "SELECT to_regclass('public.${tbl}')" | grep -q -v "^$"; then
+      return 0
+    fi
+    # try to create the table if create_sql provided
+    if [ -n "${create_sql}" ]; then
+      if psql "$DATABASE_URL" -c "${create_sql}" >> "$LOGFILE" 2>&1; then
+        log "Created missing table ${tbl}."
+        return 0
+      fi
+    fi
+    n=$((n+1))
+    sleep 1
+  done
+  log "Table ${tbl} still missing after retries."
+  return 1
+}
+
+# Define create SQL for tables we expect to always exist
+CREATE_ITEM_AUDIT_SQL="CREATE TABLE IF NOT EXISTS item_audit (\
+  id SERIAL PRIMARY KEY, \
+  item_id INTEGER, \
+  action VARCHAR(50) NOT NULL, \
+  payload JSON, \
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(), \
+  user_id TEXT, ip TEXT, method TEXT, user_agent TEXT, request_path TEXT\
+);"
+
+# Ensure the minimal required tables are present
+ensure_table "items" ""
+ensure_table "item_audit" "${CREATE_ITEM_AUDIT_SQL}"
+
 # 4) Exec main command (passed from Dockerfile/CMD)
 # If no command/args were provided (some compose setups may not pass image CMD),
 # fall back to starting uvicorn so the container remains a service.

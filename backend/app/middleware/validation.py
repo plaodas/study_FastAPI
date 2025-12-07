@@ -36,7 +36,9 @@ def _get_config_from_env() -> Tuple[List[str], List[Tuple[str, str]]]:
 
     forbidden = []
     if "FORBIDDEN_WORDS" in env and env.get("FORBIDDEN_WORDS"):
-        forbidden = [w.strip() for w in env.get("FORBIDDEN_WORDS").split(",") if w.strip()]
+        forbidden = [
+            w.strip() for w in env.get("FORBIDDEN_WORDS").split(",") if w.strip()
+        ]
 
     rules = []
     if "VALIDATION_RULES" in env and env.get("VALIDATION_RULES"):
@@ -97,20 +99,32 @@ class ValidationMiddleware(BaseHTTPMiddleware):
             try:
                 data = json.loads(body_bytes) if body_bytes else {}
             except Exception:
-                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": "Invalid JSON body"})
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"detail": "Invalid JSON body"},
+                )
 
             name = data.get("name")
             if not isinstance(name, str):
-                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": "`name` is required and must be a string"})
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"detail": "`name` is required and must be a string"},
+                )
             if not (1 <= len(name) <= 100):
-                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": "`name` must be 1-100 characters long"})
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"detail": "`name` must be 1-100 characters long"},
+                )
 
             name_clean = _sanitize(name)
 
             low = name_clean.lower()
             for fw in forbidden:
                 if fw and fw.lower() in low:
-                    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": "Name contains forbidden content"})
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={"detail": "Name contains forbidden content"},
+                    )
 
             validated = {"name": name_clean}
 
