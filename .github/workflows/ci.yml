@@ -134,6 +134,14 @@ jobs:
           # Save junit xml for artifact upload
           pytest --junitxml=integration-results.xml -q backend/tests -q || true
 
+      - name: Print uvicorn log after tests
+        if: always()
+        run: |
+          echo "--- uvicorn.log (after tests head) ---"
+          head -n 200 backend/logs/uvicorn.log || true
+          echo "--- uvicorn.log (after tests tail) ---"
+          tail -n 200 backend/logs/uvicorn.log || true
+
       - name: Upload pytest results and logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
