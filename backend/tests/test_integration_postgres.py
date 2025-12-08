@@ -147,28 +147,36 @@ def test_integration_postgres():
     # (separate process) to avoid any connection/pooling isolation issues in CI.
     if row is None:
         import subprocess
+        import sys
+        import os
 
         try:
+            script_path = os.path.join(os.getcwd(), ".github", "scripts", "query_item_audit.py")
             proc = subprocess.run(
-                ["python", ".github/scripts/query_item_audit.py"],
+                [sys.executable, script_path],
                 check=False,
                 capture_output=True,
                 text=True,
             )
-            out = proc.stdout + proc.stderr
-            # look for the count line
-            for line in out.splitlines():
-                if line.strip().startswith("item_audit count:"):
-                    try:
-                        cnt = int(line.split(":", 1)[1].strip())
-                    except Exception:
-                        cnt = 0
-                    assert cnt > 0, "No audit row found in item_audit (external check)"
-                    break
-            else:
-                raise AssertionError("No audit row found in item_audit (external check)")
-        except Exception:
-            raise AssertionError("No audit row found in item_audit")
+            out = (proc.stdout or "") + "\n" + (proc.stderr or "")
+            # dump external helper output for debugging
+            print("--- external query helper output start ---")
+            print(out)
+            print("--- external query helper output end ---")
+
+            # After external helper indicates data, re-query via SQLAlchemy to obtain the row
+            with engine.connect() as conn:
+                r = conn.execute(
+                    text(
+                        "SELECT item_id, payload, method, user_agent, request_path FROM item_audit ORDER BY id DESC LIMIT 1"
+                    )
+                )
+                row = r.fetchone()
+
+            assert row is not None, "No audit row found in item_audit (external check)"
+        except Exception as e:
+            # surface the external check failure output in the pytest logs
+            raise AssertionError(f"No audit row found in item_audit; external helper failure: {e}")
     else:
         assert row is not None, "No audit row found in item_audit"
     payload_col = row[1]
