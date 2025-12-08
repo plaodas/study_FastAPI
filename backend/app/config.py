@@ -51,10 +51,44 @@ if _USE_PYDANTIC:
         LOG_LEVEL: str = "INFO"
         # Use INTEGRATION_TEST=1 to enable integration tests
         TESTING: bool = Field(False, env="INTEGRATION_TEST")
+        # Security / Auth
+        SECRET_KEY: str = "change-me"
+        JWT_ALGORITHM: str = "HS256"
+        ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+        # Optional runtime
+        BACKEND_BASE_URL: str = "http://127.0.0.1:8000"
+        PORT: int = 8000
+
+        # DB debug
+        DB_ECHO: bool = False
+
+        # Logging / telemetry
+        SENTRY_DSN: str = ""
+
+        # Rate limiting / caching
+        RATE_LIMIT_ENABLED: bool = False
+        RATE_LIMIT_DEFAULT: str = "100/minute"
+        REDIS_URL: str = ""
+
+        # Audit / app-specific
+        FORBIDDEN_WORDS: List[str] = Field(default_factory=list)
+        VALIDATION_RULES: str = ""
+        AUDIT_ENABLED: bool = True
+        AUDIT_TABLE: str = "item_audit"
+
+        # External services
+        BROKER_URL: str = ""
+
+        # Entrypoint helpers
+        PYTHONPATH: str = "/app"
 
         class Config:
             env_file = os.getenv("ENV_FILE", ".env")
             env_file_encoding = "utf-8"
+            # allow extra env variables that are not declared as fields
+            extra = "allow"
+            model_config = {"extra": "allow", "env_file": os.getenv("ENV_FILE", ".env")}
 
 
     settings = Settings()

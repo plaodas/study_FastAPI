@@ -190,5 +190,7 @@ pip install -r requirements.txt
 	- `ENV_FILE` — optional path to an env file (default is `.env`). Useful for selecting `.env.test` when running integration tests.
 	- `INTEGRATION_TEST` — set to `1` (or `true`) to enable integration-test specific code paths.
 
+See `backend/.env.example` for a ready-to-use sample of environment variables used by the backend.
+
 - Example: run integration tests with compose override (as shown above) and ensure the override sets `DATABASE_URL` and `INTEGRATION_TEST=1` so the backend and Alembic use the test database.
 
