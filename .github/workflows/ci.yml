@@ -114,16 +114,12 @@ jobs:
           if command -v curl >/dev/null 2>&1; then
             curl -v --max-time 5 http://127.0.0.1:8000/items || true
           else
-            python - <<'PY'
-            import sys, httpx
-            try:
-              r = httpx.get('http://127.0.0.1:8000/items', timeout=5.0)
-              print('STATUS', r.status_code)
-              print(r.text)
-            except Exception as e:
-              print('HTTP check failed:', e)
-              sys.exit(0)
-            PY
+            python -c "import sys,httpx;\
+try:\
+ r = httpx.get('http://127.0.0.1:8000/items', timeout=5.0); print('STATUS', r.status_code); print(r.text)\
+except Exception as e:\
+ print('HTTP check failed:', e); sys.exit(0)"
+          fi
           echo "--- uvicorn.log (tail) ---"
           tail -n 200 backend/logs/uvicorn.log || true
 
