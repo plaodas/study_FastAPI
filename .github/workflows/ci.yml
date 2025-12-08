@@ -126,13 +126,13 @@ jobs:
           echo "--- app + env DB URLs ---"
           python .github/scripts/print_db_urls.py || true
 
-      - name: Run integration tests
+      - name: Run integration tests (single-file)
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
           INTEGRATION_TEST: '1'
         run: |
-          # Save junit xml for artifact upload
-          pytest --junitxml=integration-results.xml -q backend/tests -q || true
+          # Run only the dedicated integration test file to avoid unit tests that modify env
+          pytest --junitxml=integration-results.xml -q backend/tests/test_integration_postgres.py -q || true
 
       - name: Print uvicorn log after tests
         if: always()
