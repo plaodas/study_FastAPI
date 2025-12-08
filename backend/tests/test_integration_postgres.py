@@ -2,6 +2,7 @@ import os
 import time
 import json
 import pytest
+import sys
 
 from fastapi.testclient import TestClient
 
@@ -147,8 +148,6 @@ def test_integration_postgres():
     # (separate process) to avoid any connection/pooling isolation issues in CI.
     if row is None:
         import subprocess
-        import sys
-        import os
 
         try:
             script_path = os.path.join(os.getcwd(), ".github", "scripts", "query_item_audit.py")
