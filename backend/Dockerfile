@@ -4,6 +4,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Ensure PYTHONPATH includes /app so tests and runtime imports resolve `app` package
+ENV PYTHONPATH=/app
+
 # Install psql client so entrypoint can wait for DB and restore backups
 RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
 
