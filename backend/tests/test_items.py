@@ -4,13 +4,14 @@ import pytest
 
 # Use a file-backed SQLite DB for tests so TestClient threads can share it
 test_db_path = "/tmp/pytest_test.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
 def prepare_db():
+    # set DATABASE_URL here (fixture runtime) so module import doesn't mutate global env
+    os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
     # Import here so the env var is applied and models get registered on Base
     from app.db import engine, Base
     import app.models

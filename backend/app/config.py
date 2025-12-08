@@ -121,6 +121,19 @@ if _USE_PYDANTIC:
             return v
 
 
+    def _sanitize_pydantic_env_for_complex_fields():
+        # pydantic-settings attempts to JSON-decode env values for complex typed fields
+        # (e.g. List[str]). If an env var exists but is an empty string, pydantic's
+        # decode will raise. Treat empty-string as "missing" by removing the var
+        # so Settings() sees it as not provided and uses the default.
+        complex_keys = ("FORBIDDEN_WORDS", "ALLOWED_ORIGINS")
+        for key in complex_keys:
+            val = os.getenv(key)
+            if val is not None and str(val).strip() == "":
+                os.environ.pop(key, None)
+
+    _sanitize_pydantic_env_for_complex_fields()
+
     try:
         settings = Settings()
     except Exception as e:  # pragma: no cover - defensive fallback when pydantic env parsing fails

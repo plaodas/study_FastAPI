@@ -4,13 +4,14 @@ import pytest
 
 # Use a file-backed SQLite DB for tests so TestClient threads can share it
 test_db_path = "/tmp/pytest_test.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True, scope="module")
 def prepare_db():
+    # set DATABASE_URL here (fixture runtime) so module import doesn't mutate global env
+    os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
     # Create a test SQLite in-memory engine that's safe to share across threads
     from sqlalchemy import Table, Column, Integer, String, MetaData, JSON, create_engine
     from sqlalchemy.orm import sessionmaker
