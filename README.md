@@ -134,11 +134,30 @@ docker compose -f .\compose.yaml exec db psql -U user -d appdb -c "SELECT id,ite
 
 以下はこのリポジトリでよく使うテスト実行手順です。Windows PowerShell の例を示します。
 
-- ユニットテスト（コンテナ内で実行）
+## CI ワークフローについて（補足）
+
+このリポジトリには `.github/workflows/ci.yml` を追加しており、ワークフローは以下のように構成されています。
+
+- `unit-tests` ジョブ: 依存をインストールしてユニットテストを素早く実行します。プルリクの初期フィードバックに有効です。
+- `integration-tests` ジョブ: Postgres サービスを立ち上げ、`alembic upgrade head` でマイグレーションを適用した後に統合テストを実行します。`unit-tests` の成功後に走るよう設定されています。
+
+失敗時のデバッグ方法:
+- Actions の実行結果ページで対象ワークフローを選び、失敗したジョブをクリックしてください。
+- `Artifacts` セクションに `integration-failure-artifacts` 等が表示されていれば、ダウンロードして `integration-results.xml` や `backend/logs/*` を確認できます。
+
+手動トリガー:
+- GitHub の Actions タブから `CI` を選び、`Run workflow` で `workflow_dispatch` による手動実行が可能です。
+
+セキュリティ注意:
+- 現在のワークフローはテスト用 DB のために `user/pass` をそのまま使用します。必要に応じて `Secrets` に切り替え、`DATABASE_URL` 等を `secrets.*` 経由で渡すことを推奨します。
+# 注意: `backend/Dockerfile` に `ENV PYTHONPATH=/app` を設定済みのため、最新イメージを使えば
+# 追加で `export` する必要はありません。環境によっては明示的に設定する必要があります。
 
 ```powershell
+# 推奨（ENV が設定されたコンテナを使う場合）
+docker compose exec backend sh -c "pytest -q /app/tests -q"
 
-# コンテナ内で pytest を実行。PYTHONPATH をセットして `app` パッケージが解決されるようにします。
+# 古いイメージや人力で実行する場合（コンテナ内で PYTHONPATH をセットしたいとき）
 docker compose exec backend sh -c "export PYTHONPATH=/app; pytest -q /app/tests -q"
 ```
 
@@ -155,7 +174,8 @@ docker compose -f compose.yaml -f compose.test.yml up -d --build backend
 # マイグレーションを適用（backend コンテナ内）
 docker compose -f compose.yaml -f compose.test.yml exec backend sh -c "alembic upgrade head"
 
-# 統合テストを実行（INTEGRATION_TEST=1 を渡すことで該当テストが有効になります）
+# 統合テストを実行（`INTEGRATION_TEST=1` を渡すことで該当テストが有効になります）
+# 注意: `compose.test.yml` 側で `DATABASE_URL` をテスト DB に上書きしている想定です。
 docker compose -f compose.yaml -f compose.test.yml exec -e INTEGRATION_TEST=1 backend sh -c "pytest -q /app/tests/test_integration_postgres.py::test_integration_postgres -q"
 
 # テストが終わったらテスト用 backend を停止
@@ -189,6 +209,7 @@ pip install -r requirements.txt
 - Environment switches used by the app:
 	- `ENV_FILE` — optional path to an env file (default is `.env`). Useful for selecting `.env.test` when running integration tests.
 	- `INTEGRATION_TEST` — set to `1` (or `true`) to enable integration-test specific code paths.
+	- Complex environment variables (lists/dicts): when using `pydantic-settings`, environment variables that map to complex types (e.g. `List[str]` or `Dict[...]`) should be provided as JSON (recommended). The application includes compatibility parsing for comma-separated lists, but JSON is more reliable. See `backend/.env.example` for examples.
 
 See `backend/.env.example` for a ready-to-use sample of environment variables used by the backend.
 

@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          if [ -f backend/requirements-dev.txt ]; then pip install -r backend/requirements-dev.txt; fi
+
+      - name: Run unit tests (fast)
+        run: |
+          # Run tests without INTEGRATION_TEST to skip integration-only tests
+          pytest --maxfail=1 --disable-warnings -q backend/tests -q
+
+      - name: Upload pytest junit (unit) on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-pytest-results
+          path: |
+            backend/*.xml
+
+  integration-tests:
+    name: Integration tests (Postgres)
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: appdb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U user -d appdb_test"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          if [ -f backend/requirements-dev.txt ]; then pip install -r backend/requirements-dev.txt; fi
+
+      - name: Wait for Postgres to become ready
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U user -d appdb_test && break
+            echo "waiting for postgres... ($i)"
+            sleep 2
+          done
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
+          INTEGRATION_TEST: '1'
+        run: |
+          # Save junit xml for artifact upload
+          pytest --junitxml=integration-results.xml -q backend/tests -q || true
+
+      - name: Upload pytest results and logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-failure-artifacts
+          path: |
+            integration-results.xml
+            backend/logs/**

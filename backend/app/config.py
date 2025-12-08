@@ -9,12 +9,12 @@ _log = logging.getLogger(__name__)
 # to a lightweight env-based implementation if neither is available.
 try:
     from pydantic_settings import BaseSettings  # type: ignore
-    from pydantic import Field  # type: ignore
+    from pydantic import Field, ConfigDict, field_validator  # type: ignore
     _USE_PYDANTIC = True
     _log.debug("Using pydantic-settings BaseSettings for config")
 except Exception:
     try:
-        from pydantic import BaseSettings, Field  # type: ignore
+        from pydantic import BaseSettings, Field, ConfigDict, field_validator  # type: ignore
 
         _USE_PYDANTIC = True
         _log.debug("Using pydantic BaseSettings for config")
@@ -50,7 +50,7 @@ if _USE_PYDANTIC:
         DB_MAX_OVERFLOW: int = 20
         LOG_LEVEL: str = "INFO"
         # Use INTEGRATION_TEST=1 to enable integration tests
-        TESTING: bool = Field(False, env="INTEGRATION_TEST")
+        TESTING: bool = False
         # Security / Auth
         SECRET_KEY: str = "change-me"
         JWT_ALGORITHM: str = "HS256"
@@ -83,12 +83,42 @@ if _USE_PYDANTIC:
         # Entrypoint helpers
         PYTHONPATH: str = "/app"
 
-        class Config:
-            env_file = os.getenv("ENV_FILE", ".env")
-            env_file_encoding = "utf-8"
-            # allow extra env variables that are not declared as fields
-            extra = "allow"
-            model_config = {"extra": "allow", "env_file": os.getenv("ENV_FILE", ".env")}
+        # pydantic v2 style config
+        model_config = ConfigDict(
+            env_file=os.getenv("ENV_FILE", ".env"),
+            env_file_encoding="utf-8",
+            extra="allow",
+        )
+
+        @field_validator("TESTING", mode="before")
+        def _populate_testing_from_integration_env(cls, v):
+            # if value provided by other means, keep it
+            if v is not None:
+                return v
+            val = os.getenv("INTEGRATION_TEST")
+            if val is None:
+                return False
+            return str(val).lower() in ("1", "true", "yes")
+
+        @field_validator("FORBIDDEN_WORDS", mode="before")
+        def _parse_forbidden_words(cls, v):
+            # Accept JSON list or comma-separated string from env
+            if v is None:
+                return []
+            if isinstance(v, str):
+                s = v.strip()
+                if not s:
+                    return []
+                if s.startswith("[") or s.startswith("{"):
+                    try:
+                        import json
+
+                        return json.loads(s)
+                    except Exception:
+                        # fall back to comma-split if JSON parsing fails
+                        return [p.strip() for p in s.split(",") if p.strip()]
+                return [p.strip() for p in s.split(",") if p.strip()]
+            return v
 
 
     settings = Settings()
