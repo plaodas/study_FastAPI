@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Script to query item_audit table for debugging
+# integration test で使用
 # Usage: python .github/scripts/query_item_audit.py
 # Add bellow settings in .github/workflows/ci.yml if needed to debug DATABASE_URL issues
 # Example:

@@ -166,7 +166,11 @@ docker compose exec backend sh -c "export PYTHONPATH=/app; pytest -q /app/tests 
 ```powershell
 
 # テスト用 DB を作成（存在しない場合）
-docker compose exec db psql -U user -d postgres -c "CREATE DATABASE IF NOT EXISTS appdb_test;"
+docker compose exec db psql -U user -d postgres -c "CREATE DATABASE appdb_test;"
+# PowerShellでDB未存在確認も同時に行う
+if (-not (docker compose exec db psql -U user -d postgres -t -c "SELECT 1 FROM pg_database WHERE datname = 'appdb_test'" | Select-String "1")) {
+    docker compose exec db psql -U user -d postgres -c "CREATE DATABASE appdb_test"
+}
 
 # オーバーライド付きで backend を起動（compose.test.yml を使って DATABASE_URL を appdb_test に上書き）
 docker compose -f compose.yaml -f compose.test.yml up -d --build backend
