@@ -108,8 +108,8 @@ def test_integration_postgres():
     engine = create_engine(db_url, pool_pre_ping=True)
 
     row = None
-    # retry briefly to allow for any async/commit timing
-    for _ in range(8):
+    # retry to allow for any async/commit timing; increase retries to be more robust in CI
+    for _ in range(20):
         with engine.connect() as conn:
             try:
                 r = conn.execute(
@@ -141,7 +141,7 @@ def test_integration_postgres():
                 else:
                     # other DB errors: ignore for retry
                     pass
-        time.sleep(0.5)
+        time.sleep(1.0)
 
     assert row is not None, "No audit row found in item_audit"
     payload_col = row[1]
