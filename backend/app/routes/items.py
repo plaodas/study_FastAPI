@@ -66,8 +66,15 @@ async def create_item(request: Request, db: Session = Depends(get_db)):
         with SessionLocal() as audit_db:
             # import app.db here so we get the current engine value (tests may swap it)
             import app.db as app_db
+            import logging
 
-            audit_service.insert_audit(audit_db, app_db.engine, db_item, payload)
+            logger = logging.getLogger("uvicorn.error")
+            try:
+                logger.info("Calling insert_audit for item_id=%s", getattr(db_item, "id", None))
+                audit_service.insert_audit(audit_db, app_db.engine, db_item, payload)
+                logger.info("insert_audit completed for item_id=%s", getattr(db_item, "id", None))
+            except Exception:
+                logger.exception("insert_audit raised an exception for item_id=%s", getattr(db_item, "id", None))
     except Exception:
         # errors are logged in the service; don't fail request
         pass
