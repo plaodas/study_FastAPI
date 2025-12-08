@@ -11,6 +11,8 @@ jobs:
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: backend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -42,6 +44,8 @@ jobs:
   integration-tests:
     name: Integration tests (Postgres)
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: backend
     needs: unit-tests
     services:
       postgres:
