@@ -85,7 +85,7 @@ def test_invalid_json_body():
     client = TestClient(app)
     # send invalid json (raw text)
     resp = client.post(
-        "/items", data="not-json", headers={"Content-Type": "application/json"}
+        "/items", content="not-json", headers={"Content-Type": "application/json"}
     )
     assert resp.status_code == 400
 

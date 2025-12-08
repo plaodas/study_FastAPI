@@ -20,13 +20,25 @@ if config.config_file_name is not None:
 import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from app.db import Base, DATABASE_URL
+from app.db import Base
+from app.config import settings
 
 target_metadata = Base.metadata
 
 
+def _get_db_url():
+    # Priority: explicit env var DATABASE_URL > settings (which itself reads ENV_FILE)
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        return db_url
+    # fallback to pydantic settings
+    return getattr(settings, "DATABASE_URL", None)
+
+
 def run_migrations_offline():
-    url = DATABASE_URL
+    url = _get_db_url()
+    if not url:
+        raise RuntimeError("DATABASE_URL is not configured for offline migrations")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -39,8 +51,12 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
+    db_url = _get_db_url()
+    if not db_url:
+        raise RuntimeError("DATABASE_URL is not configured for online migrations")
+
     connectable = engine_from_config(
-        {"sqlalchemy.url": DATABASE_URL},
+        {"sqlalchemy.url": db_url},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
