@@ -142,6 +142,14 @@ jobs:
           echo "--- uvicorn.log (after tests tail) ---"
           tail -n 200 backend/logs/uvicorn.log || true
 
+      - name: Query item_audit table (debug)
+        if: always()
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
+        run: |
+          echo "--- Querying item_audit in DATABASE_URL ---"
+          python .github/scripts/query_item_audit.py || true
+
       - name: Upload pytest results and logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
