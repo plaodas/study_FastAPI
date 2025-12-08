@@ -151,11 +151,15 @@ def test_integration_postgres():
 
         try:
             script_path = os.path.join(os.getcwd(), ".github", "scripts", "query_item_audit.py")
+            # Ensure external helper uses the same DATABASE_URL as the integration test
+            child_env = os.environ.copy()
+            child_env["DATABASE_URL"] = db_url
             proc = subprocess.run(
                 [sys.executable, script_path],
                 check=False,
                 capture_output=True,
                 text=True,
+                env=child_env,
             )
             out = (proc.stdout or "") + "\n" + (proc.stderr or "")
             # dump external helper output for debugging
