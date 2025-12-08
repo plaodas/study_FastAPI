@@ -37,6 +37,12 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
     except Exception:
         inspector = None
 
+    # Log engine URL for debugging (CI will print this)
+    try:
+        logger.info("insert_audit engine url=%s", getattr(engine, "url", "<missing>"))
+    except Exception:
+        pass
+
     # Ensure audit table exists on the engine. Create it deterministically when missing.
     if inspector is None or not inspector.has_table("item_audit"):
         try:
@@ -84,6 +90,11 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
     new_audit_id = None
     try:
         with Session() as s:
+            try:
+                bind = s.get_bind()
+                logger.info("Audit session bind=%s", getattr(bind, "url", str(bind)))
+            except Exception:
+                pass
             # perform insert
             ins = audit_table.insert().values(**insert_values)
             try:
@@ -130,5 +141,10 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
             "Unexpected exception during audit insert. values=%s", insert_values
         )
         new_audit_id = None
+
+    try:
+        logger.info("insert_audit finished for item_id=%s", insert_values.get("item_id"))
+    except Exception:
+        pass
 
     return new_audit_id
