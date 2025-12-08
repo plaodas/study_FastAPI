@@ -70,15 +70,10 @@ async def create_item(request: Request, db: Session = Depends(get_db)):
 
             logger = logging.getLogger("uvicorn.error")
             try:
-                # Also print to stdout so CI's nohup/uvicorn.log captures it reliably
-                print(f"DEBUG: Calling insert_audit for item_id={getattr(db_item, 'id', None)}")
                 logger.info("Calling insert_audit for item_id=%s", getattr(db_item, "id", None))
                 audit_service.insert_audit(audit_db, app_db.engine, db_item, payload)
-                print(f"DEBUG: insert_audit completed for item_id={getattr(db_item, 'id', None)}")
                 logger.info("insert_audit completed for item_id=%s", getattr(db_item, "id", None))
             except Exception:
-                # Print before logging exception so it's visible even if logger config is odd
-                print(f"DEBUG: insert_audit raised an exception for item_id={getattr(db_item, 'id', None)}")
                 logger.exception("insert_audit raised an exception for item_id=%s", getattr(db_item, "id", None))
     except Exception:
         # errors are logged in the service; don't fail request
