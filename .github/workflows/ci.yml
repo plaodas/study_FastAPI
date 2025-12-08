@@ -95,6 +95,17 @@ jobs:
           cd backend
           alembic upgrade head
 
+      - name: Start backend HTTP server (uvicorn) in background
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
+        run: |
+          cd backend
+          mkdir -p logs
+          # start uvicorn in background and redirect logs
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > logs/uvicorn.log 2>&1 &
+          # give server a moment to start
+          sleep 2
+
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
