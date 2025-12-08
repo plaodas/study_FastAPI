@@ -119,12 +119,6 @@ jobs:
           echo "--- uvicorn.log (tail) ---"
           tail -n 200 backend/logs/uvicorn.log || true
 
-      - name: Print app and env DB URLs
-        env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
-        run: |
-          echo "--- app + env DB URLs ---"
-          python .github/scripts/print_db_urls.py || true
 
       - name: Run integration tests (single-file)
         env:
@@ -142,13 +136,7 @@ jobs:
           echo "--- uvicorn.log (after tests tail) ---"
           tail -n 200 backend/logs/uvicorn.log || true
 
-      - name: Query item_audit table (debug)
-        if: always()
-        env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
-        run: |
-          echo "--- Querying item_audit in DATABASE_URL ---"
-          python .github/scripts/query_item_audit.py || true
+      # debug steps removed: print_db_urls and query_item_audit
 
       - name: Upload pytest results and logs on failure
         if: failure()

@@ -1,3 +1,15 @@
+#!/usr/bin/env python3
+# Script to query item_audit table for debugging
+# Usage: python .github/scripts/query_item_audit.py
+# Add bellow settings in .github/workflows/ci.yml if needed to debug DATABASE_URL issues
+# Example:
+#   - name: Query item_audit table (debug)
+#     if: always()
+#     env:
+#       DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
+#     run: |
+#       echo "--- Querying item_audit in DATABASE_URL ---"
+#       python .github/scripts/query_item_audit.py || true
 import os
 import json
 from sqlalchemy import create_engine, text
