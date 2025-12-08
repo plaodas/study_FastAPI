@@ -174,3 +174,21 @@ docker compose exec db psql -U user -d postgres -c "SELECT pg_terminate_backend(
 # DB を削除
 docker compose exec db psql -U user -d postgres -c "DROP DATABASE IF EXISTS appdb_test;"
 ```
+
+## Optional: Config library and test env
+
+- This project can optionally use `pydantic-settings` for typed configuration. If installed, the application will prefer it for `backend/app/config.py`. If it's not installed, the app falls back to environment-variable based config so it still runs.
+
+- To enable full typed settings, install dependencies in `backend`:
+
+```powershell
+cd backend
+pip install -r requirements.txt
+```
+
+- Environment switches used by the app:
+	- `ENV_FILE` — optional path to an env file (default is `.env`). Useful for selecting `.env.test` when running integration tests.
+	- `INTEGRATION_TEST` — set to `1` (or `true`) to enable integration-test specific code paths.
+
+- Example: run integration tests with compose override (as shown above) and ensure the override sets `DATABASE_URL` and `INTEGRATION_TEST=1` so the backend and Alembic use the test database.
+
