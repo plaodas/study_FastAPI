@@ -57,6 +57,10 @@ Thumbs.db
 db/backups/*
 !db/backups/latest.sql
 db/backups/archive/
+*.bak
 
 # Misc
 *.dump
+
+# VibeCoding session files (local chat saves)
+.vibe/
