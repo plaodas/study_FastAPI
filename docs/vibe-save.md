@@ -27,13 +27,55 @@ copy .\tools\git-hooks\pre-push .git\hooks\pre-push
 # Git Bash/WSL の場合: chmod +x .git/hooks/pre-push
 ```
 
-3. VSCode でタスクを使うか、キー割り当てを追加します（例）:
-
+3. VSCode でタスクを使うか、キー割り当てを追加します
+（設定例）:   
+* .vscode\keybindings.json
 ```json
 {
   "key": "ctrl+alt+x",
   "command": "workbench.action.tasks.runTask",
   "args": "Save Vibe session (commit from clipboard)"
+}
+```
+* .vscode/tasks.json
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Save Vibe session (local from clipboard)",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Get-Clipboard | & '${workspaceFolder}/tools/save-vibe.ps1'"
+      ],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Save Vibe session (commit from clipboard)",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/tools/save-vibe.ps1",
+        "-commit"
+      ],
+      "problemMatcher": []
+    }
+  ]
 }
 ```
 

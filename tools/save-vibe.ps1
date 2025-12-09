@@ -24,6 +24,33 @@ Notes:
   - `.vibe/` is added to `.gitignore` by default. Use `-commit` only if you intend
     to record the session in the branch (be cautious with secrets).
   - To enable pre-push checking, copy `tools/git-hooks/pre-push` to `.git/hooks/pre-push`.
+
+  Vibe セッション保存スクリプト (日本語説明)
+  
+  目的:
+    VibeCoding のチャット内容をローカルの `.vibe/sessions` 配下に保存します。
+    インタラクティブ編集（エディタで貼り付け）またはクリップボード/stdin からの
+    取り込みをサポートし、`-commit` を付けると自動で `git add`+`git commit` します。
+  
+  使い方例:
+    # インタラクティブ（Notepad または $env:EDITOR を起動）:
+    # Copilot Chat windowでCopy Allしてから実行するとcurrent branch名で.vive/sessionsにmdファイルが保存される
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\save-vibe.ps1
+  
+    # クリップボードから保存（非対話）:
+    Get-Clipboard | .\tools\save-vibe.ps1
+  
+    # クリップボードから保存して現在のブランチにコミット:
+    Get-Clipboard | .\tools\save-vibe.ps1 -commit
+  
+  注意事項:
+    - Windows ではパイプ経由の文字コード不一致を避けるため `Get-Clipboard` を優先します。
+    - スクリプト実行が制限されている場合は、一時的に `-ExecutionPolicy Bypass` を使うか、
+      `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` を検討してください。
+    - ファイルは UTF-8 (BOM付き) で書き出すため、Windows のメモ帳でも文字化けしにくくしています。
+    - デフォルトで `.vibe/` は `.gitignore` に追加されています。ブランチに履歴を残す場合のみ
+      `-commit` を使ってください（シークレットに注意）。
+    - pre-push フックを有効にするには `tools/git-hooks/pre-push` を `.git/hooks/pre-push` にコピーしてください。
 #>
 
 param(
@@ -40,46 +67,40 @@ Set-Location $root
 
 if (-not $message) {
   # If input is redirected (piped), read stdin. Otherwise open editor interactively.
-  try {
-    $isRedirected = [Console]::IsInputRedirected
-  #<
-  # Vibe セッション保存スクリプト (日本語説明)
-  #
-  # 目的:
-  #   VibeCoding のチャット内容をローカルの `.vibe/sessions` 配下に保存します。
-  #   インタラクティブ編集（エディタで貼り付け）またはクリップボード/stdin からの
-  #   取り込みをサポートし、`-commit` を付けると自動で `git add`+`git commit` します。
-  #
-  # 使い方例:
-  #   # インタラクティブ（Notepad または $env:EDITOR を起動）:
-  #   # Copilot Chat windowでCopy Allしてから実行するとcurrent branch名で.vive/sessionsにmdファイルが保存される
-  #   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\save-vibe.ps1
-  #
-  #   # クリップボードから保存（非対話）:
-  #   Get-Clipboard | .\tools\save-vibe.ps1
-  #
-  #   # クリップボードから保存して現在のブランチにコミット:
-  #   Get-Clipboard | .\tools\save-vibe.ps1 -commit
-  #
-  # 注意事項:
-  #   - Windows ではパイプ経由の文字コード不一致を避けるため `Get-Clipboard` を優先します。
-  #   - スクリプト実行が制限されている場合は、一時的に `-ExecutionPolicy Bypass` を使うか、
-  #     `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` を検討してください。
-  #   - ファイルは UTF-8 (BOM付き) で書き出すため、Windows のメモ帳でも文字化けしにくくしています。
-  #   - デフォルトで `.vibe/` は `.gitignore` に追加されています。ブランチに履歴を残す場合のみ
-  #     `-commit` を使ってください（シークレットに注意）。
-  #   - pre-push フックを有効にするには `tools/git-hooks/pre-push` を `.git/hooks/pre-push` にコピーしてください。
-  #>
-    & $env:EDITOR $tmp
-  } elseif ($env:OS -eq 'Windows_NT') {
-    # Windows fallback
-    notepad $tmp
+  # Determine whether input is redirected (piped). If so, read stdin;
+  # otherwise open a temporary file in the user's editor for interactive paste.
+  $isRedirected = [Console]::IsInputRedirected
+  if ($isRedirected) {
+    $message = [Console]::In.ReadToEnd()
   } else {
-    # Unix-like fallback
-    vi $tmp
+    # If no piped input, try the clipboard (Windows PowerShell provides Get-Clipboard).
+    # This makes running as a VS Code task (without explicit piping) work with clipboard workflow.
+    $clipboardText = $null
+    try {
+      $clipboardText = Get-Clipboard -Raw
+    } catch {
+      # Get-Clipboard may not exist in some environments; ignore error and fall back to editor
+      $clipboardText = $null
+    }
+
+    if ($clipboardText -and $clipboardText.Trim().Length -gt 0) {
+      $message = $clipboardText
+    } else {
+      # No clipboard content — open a temp file in the editor for interactive paste
+      $tmp = [System.IO.Path]::GetTempFileName()
+      if ($env:EDITOR) {
+        & $env:EDITOR $tmp
+      } elseif ($env:OS -eq 'Windows_NT') {
+        # Windows fallback
+        notepad $tmp
+      } else {
+        # Unix-like fallback
+        vi $tmp
+      }
+      $message = Get-Content $tmp -Raw
+      Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
   }
-  $message = Get-Content $tmp -Raw
-  Remove-Item $tmp -ErrorAction SilentlyContinue
 }
 
 if (-not $message) {
