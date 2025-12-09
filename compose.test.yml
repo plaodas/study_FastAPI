@@ -4,4 +4,6 @@ services:
       - DATABASE_URL=${DATABASE_URL_TEST}
       # Optional DSN used by Postgres-specific tests. Override in your environment
       # or leave as the example below (replace user/password/db as appropriate).
-      - TEST_POSTGRES_DSN=${TEST_POSTGRES_DSN:-postgresql+psycopg2://user:password@db:5432/appdb_test}
+      # Default to using the Compose Postgres user/password if TEST_POSTGRES_DSN
+      # is not provided so local `POSTGRES_*` settings remain authoritative.
+      - TEST_POSTGRES_DSN=${TEST_POSTGRES_DSN:-postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-appdb_test}}
