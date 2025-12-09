@@ -16,32 +16,14 @@
 Docker と Docker Compose がインストールされている環境で以下を実行します。
 
 PowerShell の例:
+- イメージをビルドしてバックエンドを起動
 ```powershell
-# イメージをビルドしてバックエンドを起動
-docker compose -f .\compose.yaml build backend
-# FastAPI + Next.js サンプルプロジェクト
-
-このリポジトリは FastAPI バックエンド（Postgres）と Next.js フロントエンドを Docker Compose で動かすサンプル構成です。バックエンドは `backend/`、フロントエンドは `frontend/` にあります。
-
-**主要機能**
-- FastAPI バックエンド（`backend/`）
-- Next.js フロントエンド（`frontend/`）
-- PostgreSQL（Compose ボリュームで永続化）
-- 起動時のバックアップ復元と Alembic マイグレーション自動適用
-- リクエストバリデーション・禁止語フィルタ（ミドルウェア）
-- 簡易ログ回転（`entrypoint.sh`）
-
-## クイックスタート
-Docker と Docker Compose がある環境でルートから:
-
-- ビルド・起動（PowerShell の例）:
-```
 docker compose -f .\compose.yaml build backend
 docker compose -f .\compose.yaml up -d
 ```
 
 - ログ確認:
-```
+```powershell
 docker compose -f .\compose.yaml logs -f backend
 ```
 
@@ -95,18 +77,11 @@ CI の失敗時のログ収集やローカルでの再現手順は `docs/ci-debu
 ## 環境ファイル (重要)
 
 - Compose の変数補間: `docker compose` はリポジトリルートの `.env`（`./.env`）を起動時に読み込み、`compose.yaml` 内の `${...}` を展開します。例: `POSTGRES_USER` や `DATABASE_URL` の補間はルート `.env` に依存します。
-- アプリのランタイム設定: アプリケーション（pydantic）は `ENV_FILE` 環境変数で指定されたファイル（デフォルト `.env`）を起動時に読み込みます。本リポジトリの `compose.yaml` は `ENV_FILE=.env` を `backend` サービスに渡すため、コンテナ内の `/app/.env`（ホストの `backend/.env`）がアプリの設定ソースになります。
-
-このため、同じ設定が「ルートの `.env`」と「`backend/.env`」の両方に存在すると重複になります。運用上の推奨:
-
+- アプリのランタイム設定: アプリケーション（pydantic）は `ENV_FILE` 環境変数で指定されたファイル（デフォルト `.env`）を起動時に読み込みます。本リポジトリの `compose.yaml` は `ENV_FILE=.env` を `backend` サービスに渡すため、コンテナ内の `/app/.env`（ホストの `backend/.env`）がアプリの設定ソースになります。このため、同じ設定が「ルートの `.env`」と「`backend/.env`」の両方に存在すると重複になります。
 - 明確に分ける: Compose 用変数（DB ユーザ/パス、ボリュームなど）はルート `.env`、アプリ固有のランタイム設定（ロギング、認証、アプリ内のフラグ等）は `backend/.env` に置く。  
 - 単一ソースを使いたい場合: ルート `.env` をコンテナにマウントしてアプリ側でも使わせる（例: `- ./.env:/app/.env:ro` を `backend.volumes` に追加）か、`ENV_FILE` をルートパスに合わせて変更してください（セキュリティに注意）。
 - ドキュメント化: 新しい `backend/README.md` と `docs/` に環境変数の説明を追加済みです。どちらが正なのか運用ルールをチームで決めてください。
 
----
 
-設定は `compose.yaml` の `backend` サービスで環境変数として変更できます:
-
-- `STARTUP_ROTATE_MAX_BYTES` — 回転閾値（バイト、デフォルト `5242880` = 5MB）
- 
-参考ドキュメント: VibeCoding のチャット保存については `docs/vibe-save.md` を参照してください。
+## 参考情報
+- VibeCoding のチャット保存については `docs/vibe-save.md` を参照してください。
