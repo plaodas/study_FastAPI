@@ -65,6 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: backend
+      # Provide DSN explicitly so Postgres-specific tests can read it.
+      TEST_POSTGRES_DSN: postgresql+psycopg2://user:pass@localhost:5432/appdb_test
     needs: unit-tests
     # Run integration tests only on pushes to main (avoid heavy PR runs)
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main') }}
@@ -152,9 +154,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://user:pass@localhost:5432/appdb_test
           INTEGRATION_TEST: '1'
+          TEST_POSTGRES_DSN: postgresql+psycopg2://user:pass@localhost:5432/appdb_test
         run: |
-          # Run only the dedicated integration test file to avoid unit tests that modify env
-          pytest --junitxml=integration-results.xml -q backend/tests/test_integration_postgres.py -q || true
+          # Run dedicated integration tests including Postgres-specific audit tests
+          pytest --junitxml=integration-results.xml -q backend/tests/test_integration_postgres.py backend/tests/test_audit_service_postgres.py -q || true
 
       - name: Print uvicorn log after tests
         if: always()

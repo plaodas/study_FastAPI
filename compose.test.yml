@@ -2,3 +2,6 @@ services:
   backend:
     environment:
       - DATABASE_URL=${DATABASE_URL_TEST}
+      # Optional DSN used by Postgres-specific tests. Override in your environment
+      # or leave as the example below (replace user/password/db as appropriate).
+      - TEST_POSTGRES_DSN=${TEST_POSTGRES_DSN:-postgresql+psycopg2://user:password@db:5432/appdb_test}
