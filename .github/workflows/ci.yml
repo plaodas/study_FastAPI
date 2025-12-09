@@ -1,10 +1,23 @@
 name: CI
 
+# Prevent duplicate runs and allow cancelling in-progress runs on same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ main ]
+    # only run CI on pushes that touch backend or workflow files
+    paths:
+      - 'backend/**'
+      - '.github/**'
   pull_request:
     branches: [ main ]
+    # limit PR CI runs to PRs that touch backend or workflow files
+    paths:
+      - 'backend/**'
+      - '.github/**'
   workflow_dispatch:
 
 jobs:
@@ -16,6 +29,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/backend/requirements.txt') }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
@@ -47,6 +66,8 @@ jobs:
     env:
       PYTHONPATH: backend
     needs: unit-tests
+    # Run integration tests only on pushes to main (avoid heavy PR runs)
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main') }}
     services:
       postgres:
         image: postgres:15
@@ -54,8 +75,7 @@ jobs:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: pass
           POSTGRES_DB: appdb_test
-        ports:
-          - 5432:5432
+        # avoid exposing container ports on the runner host
         options: >-
           --health-cmd="pg_isready -U user -d appdb_test"
           --health-interval=5s --health-timeout=5s --health-retries=10
@@ -79,6 +99,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
           if [ -f backend/requirements-dev.txt ]; then pip install -r backend/requirements-dev.txt; fi
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/backend/requirements.txt') }}
 
       - name: Wait for Postgres to become ready
         run: |
@@ -146,3 +172,4 @@ jobs:
           path: |
             integration-results.xml
             backend/logs/**
+          retention-days: 3

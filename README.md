@@ -1,6 +1,8 @@
-# FastAPI + Next.js サンプルプロジェクト
+# FastAPI + Next.js Vibe Codingプロジェクト
 
-このリポジトリは、FastAPI バックエンド（Postgres）と Next.js フロントエンドを Docker Compose で動かすサンプル構成です。
+> このリポジトリはVibe Codingの練習用に作成しています。   
+> FastAPI バックエンド（Postgres）と Next.js フロントエンドを Docker Compose で動かすサンプル構成です。   
+> Github Actionsのworkflowを含んでいます。   
 
 **主要機能**
 - FastAPI バックエンド（`backend/`）
