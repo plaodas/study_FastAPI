@@ -105,7 +105,8 @@ CI の失敗時のログ収集やローカルでの再現手順は `docs/ci-debu
 
 ---
 
-必要なら、詳細コマンドや長い SQL 例は `docs/` 以下へ分割してリンクを追加します（希望があれば私が分割して `docs/` を作成します）。
 設定は `compose.yaml` の `backend` サービスで環境変数として変更できます:
 
 - `STARTUP_ROTATE_MAX_BYTES` — 回転閾値（バイト、デフォルト `5242880` = 5MB）
+ 
+参考ドキュメント: VibeCoding のチャット保存については `docs/vibe-save.md` を参照してください。

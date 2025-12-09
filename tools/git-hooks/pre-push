@@ -1,0 +1,24 @@
+uncommitted=$(git diff --name-only -- .vibe 2>/dev/null)
+#!/bin/sh
+# pre-push: `.vibe` 下の未追跡 / 未コミットファイルがある場合にプッシュを中止するテンプレート
+#
+# インストール（ローカル開発環境）:
+#   cp tools/git-hooks/pre-push .git/hooks/pre-push
+#   chmod +x .git/hooks/pre-push
+#
+# 動作:
+#   - `.vibe/` に未追跡または変更されたファイルがある場合、プッシュを中止して
+#     コミット方法を案内します。ローカルのチャット保存が誤って公開されるのを防ぎます。
+#   - チーム方針に合わせてメッセージや動作を調整してください。
+
+unstaged=$(git ls-files --others --exclude-standard .vibe 2>/dev/null)
+uncommitted=$(git diff --name-only -- .vibe 2>/dev/null)
+
+if [ -n "$unstaged" ] || [ -n "$uncommitted" ]; then
+  echo "Detected untracked/uncommitted .vibe session files."
+  echo "If you intend to include them in this push, run:"
+  echo "  git add .vibe && git commit -m 'vibe: save session'"
+  echo "Or, to keep sessions local, remove or ignore them. Push aborted."
+  exit 1
+fi
+exit 0

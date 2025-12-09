@@ -61,3 +61,6 @@ db/backups/archive/
 
 # Misc
 *.dump
+
+# VibeCoding session files (local chat saves)
+.vibe/
