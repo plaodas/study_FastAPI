@@ -5,7 +5,30 @@ import json
 from typing import List, Tuple
 
 from app.utils import sanitize
-from app.config import settings
+import app.config as conf
+
+
+class _SettingsProxy:
+    """Proxy object that delegates attribute access to `app.config.settings`.
+
+    This lets other modules assign to `vmod.settings.<attr>` in tests or runtime
+    and have the changes reflected in the central `app.config.settings` object.
+    """
+    def __getattr__(self, name):
+        s = getattr(conf, "settings", None)
+        if s is None:
+            raise AttributeError(name)
+        return getattr(s, name)
+
+    def __setattr__(self, name, value):
+        s = getattr(conf, "settings", None)
+        if s is None:
+            # fallback: set attribute on this proxy
+            return object.__setattr__(self, name, value)
+        return setattr(s, name, value)
+
+
+settings = _SettingsProxy()
 
 
 def _get_config_from_settings() -> Tuple[List[str], List[Tuple[str, str]]]:

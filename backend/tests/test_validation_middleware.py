@@ -1,38 +1,35 @@
+"""Integration tests for ValidationMiddleware.
+
+These tests use the `prepare_db` fixture to provide a shared SQLite engine for
+`TestClient`. Tests may mutate `app.config.settings` at runtime; the middleware
+proxies settings so runtime changes are observed.
+"""
+
 import os
 from fastapi.testclient import TestClient
 
 
+# Middleware should block requests containing forbidden words
 def test_middleware_blocks_forbidden(monkeypatch, prepare_db):
-    # ensure DB prepared by fixture
-    from app.main import app
+    # ensure DB prepared by fixture and app is imported after config mutation
     import app.config as conf
-
-    # set forbidden words on settings (both global config and middleware-local reference)
     conf.settings.FORBIDDEN_WORDS = ["forbidden"]
-    # ensure middleware applies to POST /items in this test
     conf.settings.VALIDATION_RULES = [("/items", "POST")]
-    # sometimes the middleware module holds its own reference to settings;
-    # set the value there too to be certain
-    try:
-        import app.middleware.validation as vmod
 
-        vmod.settings.FORBIDDEN_WORDS = ["forbidden"]
-        vmod.settings.VALIDATION_RULES = [("/items", "POST")]
-    except Exception:
-        pass
+    # create app after settings set so middleware sees the configured rules
+    from app.main import app
 
     client = TestClient(app)
     resp = client.post("/items", json={"name": "this contains forbidden word"})
     assert resp.status_code == 400
 
 
+# Middleware should match configured POST /items rule and sanitize the body
 def test_middleware_matches_prefix_rule(prepare_db):
-    from app.main import app
     import app.config as conf
-
-    # configure validation rule to match the /items POST
     conf.settings.VALIDATION_RULES = [("/items", "POST")]
 
+    from app.main import app
     client = TestClient(app)
     data = {"name": "  <b>hello</b>\nworld"}
     resp = client.post("/items", json=data)
@@ -41,6 +38,7 @@ def test_middleware_matches_prefix_rule(prepare_db):
     assert body["name"] == "hello world"
 
 
+# Ensure middleware sanitizes once and route does not re-sanitize
 def test_middleware_and_route_do_not_double_sanitize(monkeypatch, prepare_db):
     from app.main import app
 
@@ -48,7 +46,6 @@ def test_middleware_and_route_do_not_double_sanitize(monkeypatch, prepare_db):
 
     def fake_sanitize(s: str) -> str:
         calls["count"] += 1
-        # simple pass-through that removes HTML tags for the test
         return s.replace("<b>", "").replace("</b>", "")
 
     # patch both modules' sanitized references

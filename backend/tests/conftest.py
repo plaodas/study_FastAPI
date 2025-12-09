@@ -2,6 +2,13 @@ import os
 import pytest
 
 
+"""Test fixtures and helpers for backend tests.
+
+Provides `prepare_db` which sets up a SQLite in-memory engine that is safe to
+share with `TestClient` (uses StaticPool). Tests that need DB access should
+request the `prepare_db` fixture.
+"""
+
 # Shared DB fixture for tests that need the app DB ready. Tests may request this
 # fixture by name (`prepare_db`) to initialize an in-memory SQLite engine that
 # is safe to share with TestClient threads.

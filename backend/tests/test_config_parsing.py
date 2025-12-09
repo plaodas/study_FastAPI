@@ -2,6 +2,11 @@ import importlib
 
 
 def test_settings_parses_env_vars(monkeypatch):
+    """Verify settings are read from environment and complex types handled.
+
+    This test reloads `app.config` to exercise different Settings implementations
+    (pydantic-based or simple env-based fallback).
+    """
     # set a variety of env vars and reload the config module to pick them up
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("DB_POOL_SIZE", "33")
