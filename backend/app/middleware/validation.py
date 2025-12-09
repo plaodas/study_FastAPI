@@ -2,63 +2,80 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
 import json
-import re
-import os
 from typing import List, Tuple
 
-
-def _load_env_file(path: str) -> dict:
-    """Simple .env loader: returns dict of KEY -> VALUE. Ignores comments and blank lines."""
-    data = {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    data[k.strip()] = v.strip()
-    except Exception:
-        pass
-    return data
+from app.utils import sanitize
+import app.config as conf
 
 
-def _get_config_from_env() -> Tuple[List[str], List[Tuple[str, str]]]:
-    """Return (forbidden_words, validation_rules).
+class _SettingsProxy:
+    """Proxy object that delegates attribute access to `app.config.settings`.
 
-    validation_rules is list of (path_pattern, method) where path_pattern may end with '*'.
+    This lets other modules assign to `vmod.settings.<attr>` in tests or runtime
+    and have the changes reflected in the central `app.config.settings` object.
     """
-    env = os.environ.copy()
-    # Try to read a .env file at project root if present
-    root_env = _load_env_file(os.path.join(os.getcwd(), ".env"))
-    env.update(root_env)
+    def __getattr__(self, name):
+        s = getattr(conf, "settings", None)
+        if s is None:
+            raise AttributeError(name)
+        return getattr(s, name)
 
+    def __setattr__(self, name, value):
+        s = getattr(conf, "settings", None)
+        if s is None:
+            # fallback: set attribute on this proxy
+            return object.__setattr__(self, name, value)
+        return setattr(s, name, value)
+
+
+settings = _SettingsProxy()
+
+
+def _get_config_from_settings() -> Tuple[List[str], List[Tuple[str, str]]]:
+    """Return (forbidden_words, validation_rules) using `app.config.settings`.
+
+    `validation_rules` is a list of (path_pattern, method) where path_pattern may end with '*'.
+    """
     forbidden = []
-    if "FORBIDDEN_WORDS" in env and env.get("FORBIDDEN_WORDS"):
-        forbidden = [
-            w.strip() for w in env.get("FORBIDDEN_WORDS").split(",") if w.strip()
-        ]
+    try:
+        fw = getattr(settings, "FORBIDDEN_WORDS", None)
+        if fw:
+            # settings.FORBIDDEN_WORDS may already be a list
+            if isinstance(fw, (list, tuple)):
+                forbidden = [str(x).strip() for x in fw if str(x).strip()]
+            else:
+                forbidden = [p.strip() for p in str(fw).split(",") if p.strip()]
+    except Exception:
+        forbidden = []
 
     rules = []
-    if "VALIDATION_RULES" in env and env.get("VALIDATION_RULES"):
-        raw = env.get("VALIDATION_RULES")
-        parts = [p.strip() for p in raw.split(";") if p.strip()]
-        for p in parts:
-            if ":" in p:
-                path, method = p.split(":", 1)
-                rules.append((path.strip(), method.strip().upper()))
+    try:
+        raw = getattr(settings, "VALIDATION_RULES", None)
+        if raw:
+            # Accept several input shapes: string, list of strings, or list of tuples
+            if isinstance(raw, str):
+                parts = [p.strip() for p in raw.split(";") if p.strip()]
+                for p in parts:
+                    if ":" in p:
+                        path, method = p.split(":", 1)
+                        rules.append((path.strip(), method.strip().upper()))
+            elif isinstance(raw, (list, tuple)):
+                for entry in raw:
+                    # tuple/list like (path, method)
+                    if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                        rules.append((str(entry[0]).strip(), str(entry[1]).strip().upper()))
+                    else:
+                        s = str(entry).strip()
+                        if ":" in s:
+                            path, method = s.split(":", 1)
+                            rules.append((path.strip(), method.strip().upper()))
+            else:
+                # unknown format -> ignore
+                pass
+    except Exception:
+        rules = []
+
     return forbidden, rules
-
-
-def _sanitize(s: str) -> str:
-    # remove HTML tags
-    s = re.sub(r"<[^>]*>", "", s)
-    # remove control chars except newline/tab/space
-    s = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", s)
-    # normalize whitespace
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
 
 
 class ValidationMiddleware(BaseHTTPMiddleware):
@@ -71,7 +88,7 @@ class ValidationMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        forbidden, rules = _get_config_from_env()
+        forbidden, rules = _get_config_from_settings()
 
         # If no rules are configured, default to POST /items for backward compatibility
         if not rules:
@@ -116,7 +133,7 @@ class ValidationMiddleware(BaseHTTPMiddleware):
                     content={"detail": "`name` must be 1-100 characters long"},
                 )
 
-            name_clean = _sanitize(name)
+            name_clean = sanitize(name)
 
             low = name_clean.lower()
             for fw in forbidden:

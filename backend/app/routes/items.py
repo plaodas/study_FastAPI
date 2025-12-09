@@ -26,7 +26,12 @@ async def create_item(request: Request, db: Session = Depends(get_db)):
         validated = payload
 
     item_in = schemas.ItemCreate(**validated)
-    clean_name = sanitize(item_in.name)
+    # If the middleware has already validated/sanitized the body, avoid re-sanitizing.
+    # This keeps behavior idempotent but avoids duplicate work when middleware is enabled.
+    if getattr(request.state, "validated_json", None) is not None:
+        clean_name = item_in.name
+    else:
+        clean_name = sanitize(item_in.name)
     db_item = models.Item(name=clean_name)
     db.add(db_item)
     db.flush()

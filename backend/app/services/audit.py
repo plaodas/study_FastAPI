@@ -1,83 +1,73 @@
-from sqlalchemy import Table, MetaData, text, inspect, Column, Integer, String
+from sqlalchemy import Table, MetaData, text, inspect, Column, Integer, String, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import JSON as SA_JSON
 import logging
 
 
-def insert_audit(db, engine, db_item, payload_metadata: dict):
-    """Insert an audit row for the given item in a deterministic way.
+_audit_table_cache = {}
 
-    - Ensures the `item_audit` table exists on the provided `engine` before inserting.
-    - Uses a short-lived session bound to `engine` to perform INSERT and any backfill
-      in the same transactional context to avoid cross-connection races (important for
-      in-memory SQLite tests).
-    - Avoids relying on RETURNING for SQLite compatibility; this function focuses on
-      reliably inserting the audit row (the caller may inspect the table if needed).
-    Returns the new audit id when available, else None.
+
+def _get_or_create_audit_table(engine):
+    """Return a Table object for `item_audit`, creating it when missing.
+
+    Caches per-engine to avoid repeated reflection/creation.
     """
-    logger = logging.getLogger("uvicorn.error")
-    meta = MetaData()
-    try:
-        logger.info(
-            "insert_audit called for item_id=%s payload_keys=%s",
-            getattr(db_item, "id", None),
-            (
-                list(payload_metadata.keys())
-                if isinstance(payload_metadata, dict)
-                else None
-            ),
-        )
-    except Exception:
-        # best-effort logging, don't fail the flow
-        pass
+    key = getattr(engine, "url", None) or id(engine)
+    if key in _audit_table_cache:
+        return _audit_table_cache[key]
 
+    meta = MetaData()
     try:
         inspector = inspect(engine)
     except Exception:
         inspector = None
 
-    # Log engine URL for debugging (CI will print this)
+    if inspector is None or not inspector.has_table("item_audit"):
+        # Create deterministically
+        audit_table = Table(
+            "item_audit",
+            meta,
+            Column("id", Integer, primary_key=True),
+            Column("item_id", Integer),
+            Column("action", String),
+            Column("payload", SA_JSON),
+            Column("user_id", String),
+            Column("ip", String),
+            Column("method", String),
+            Column("user_agent", String),
+            Column("request_path", String),
+        )
+        meta.create_all(bind=engine)
+    else:
+        audit_table = Table("item_audit", meta, autoload_with=engine)
+
+    _audit_table_cache[key] = audit_table
+    return audit_table
+
+
+def insert_audit(db, engine, db_item, payload_metadata: dict):
+    """Insert an audit row for the given item and return the new id when available.
+
+    Uses a short-lived session bound to `engine`. On PostgreSQL the function
+    attempts to use `RETURNING` to obtain the new id; on other dialects it falls
+    back to a safe query after commit.
+    """
+    logger = logging.getLogger(__name__)
+
     try:
-        logger.info("insert_audit engine url=%s", getattr(engine, "url", "<missing>"))
+        logger.info("insert_audit called for item_id=%s", getattr(db_item, "id", None))
     except Exception:
         pass
 
-    # Ensure audit table exists on the engine. Create it deterministically when missing.
-    if inspector is None or not inspector.has_table("item_audit"):
-        try:
-            # Use SA_JSON for JSON column where supported; SQLite will store JSON as text.
-            audit_table = Table(
-                "item_audit",
-                meta,
-                Column("id", Integer, primary_key=True),
-                Column("item_id", Integer),
-                Column("action", String),
-                Column("payload", SA_JSON),
-                Column("user_id", String),
-                Column("ip", String),
-                Column("method", String),
-                Column("user_agent", String),
-                Column("request_path", String),
-            )
-            meta.create_all(bind=engine)
-        except Exception:
-            logging.getLogger("uvicorn.error").exception(
-                "Failed to create item_audit table on engine"
-            )
-            return None
-    else:
-        # reflect existing table
-        try:
-            audit_table = Table("item_audit", meta, autoload_with=engine)
-        except Exception:
-            logging.getLogger("uvicorn.error").exception(
-                "Failed to reflect item_audit table"
-            )
-            return None
+    try:
+        audit_table = _get_or_create_audit_table(engine)
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to ensure item_audit table")
+        return None
 
     insert_values = {
-        "item_id": db_item.id,
+        "item_id": getattr(db_item, "id", None),
         "action": "create",
         "payload": payload_metadata,
     }
@@ -92,54 +82,63 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
         with Session() as s:
             try:
                 bind = s.get_bind()
-                logger.info("Audit session bind=%s", getattr(bind, "url", str(bind)))
-            except Exception:
-                pass
-            # perform insert
-            ins = audit_table.insert().values(**insert_values)
-            try:
-                logger.info(
-                    "About to execute audit INSERT with values: %s", insert_values
-                )
-            except Exception:
-                pass
-            s.execute(ins)
-            s.commit()
-            try:
-                logger.info(
-                    "Audit INSERT committed for item_id=%s",
-                    insert_values.get("item_id"),
-                )
+                logger.debug("Audit session bind=%s", getattr(bind, "url", str(bind)))
             except Exception:
                 pass
 
-            # best-effort backfill for typed columns (Postgres JSON operators used previously)
-            # For portability, on Postgres use the JSON ->> operator; on SQLite the payload
-            # column is JSON/text so the backfill may be a no-op in tests. Keep the SQL safe.
+            ins = audit_table.insert().values(**insert_values)
+
+            # Prefer RETURNING on Postgres to get the inserted id
             if engine.dialect.name == "postgresql":
-                backfill_sql = text(
-                    "UPDATE item_audit SET "
-                    "user_id = COALESCE(user_id, payload ->> 'user_id'), "
-                    "ip = COALESCE(ip, payload ->> 'ip'), "
-                    "method = COALESCE(method, payload ->> 'method'), "
-                    "user_agent = COALESCE(user_agent, payload ->> 'user_agent'), "
-                    "request_path = COALESCE(request_path, payload ->> 'request_path') "
-                    "WHERE payload IS NOT NULL AND (user_id IS NULL OR ip IS NULL OR method IS NULL OR user_agent IS NULL OR request_path IS NULL)"
-                )
-                s.execute(backfill_sql)
-                s.commit()
+                try:
+                    ins = ins.returning(audit_table.c.id)
+                    result = s.execute(ins)
+                    new_audit_id = result.scalar_one_or_none()
+                    s.commit()
+                except Exception:
+                    s.rollback()
+                    logger.exception("Postgres audit INSERT failed")
+                    new_audit_id = None
             else:
-                # For SQLite (tests), keep backfill lightweight or skip because JSON operators differ.
-                pass
-    except SQLAlchemyError as e:
-        logger.exception(
-            "SQLAlchemyError during core audit INSERT. values=%s", insert_values
-        )
+                try:
+                    s.execute(ins)
+                    s.commit()
+                except Exception:
+                    s.rollback()
+                    logger.exception("Audit INSERT failed")
+                    return None
+
+                # best-effort: fetch last id deterministically
+                try:
+                    with engine.connect() as conn:
+                        sel = select(audit_table.c.id).order_by(audit_table.c.id.desc()).limit(1)
+                        new_audit_id = conn.execute(sel).scalar_one_or_none()
+                except Exception:
+                    logger.exception("Failed to fetch new audit id after insert")
+                    new_audit_id = None
+
+            # Postgres-only backfill: keep behavior for typed columns
+            if engine.dialect.name == "postgresql":
+                try:
+                    backfill_sql = text(
+                        "UPDATE item_audit SET "
+                        "user_id = COALESCE(user_id, payload ->> 'user_id'), "
+                        "ip = COALESCE(ip, payload ->> 'ip'), "
+                        "method = COALESCE(method, payload ->> 'method'), "
+                        "user_agent = COALESCE(user_agent, payload ->> 'user_agent'), "
+                        "request_path = COALESCE(request_path, payload ->> 'request_path') "
+                        "WHERE payload IS NOT NULL AND (user_id IS NULL OR ip IS NULL OR method IS NULL OR user_agent IS NULL OR request_path IS NULL)"
+                    )
+                    s.execute(backfill_sql)
+                    s.commit()
+                except Exception:
+                    logger.exception("Postgres backfill failed")
+
+    except SQLAlchemyError:
+        logger.exception("SQLAlchemyError during audit insertion")
         new_audit_id = None
-    except Exception as e:
-        logger.exception(
-            "Unexpected exception during audit insert. values=%s", insert_values
-        )
+    except Exception:
+        logger.exception("Unexpected exception during audit insertion")
         new_audit_id = None
 
     try:
