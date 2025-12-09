@@ -31,23 +31,23 @@ docker compose -f .\compose.yaml logs -f backend
 
 ## バックアップと復元（概要）
 - `db/backups/latest.sql` をマウントしておくと起動時に復元を試行します。  
-- フルダンプの復元は環境によって失敗する場合があるため、部分復元やダンプのクリーンアップを推奨します。詳細手順は `docs/backup-restore.md` へ移動可能です。
+- フルダンプの復元は環境によって失敗する場合があるため、部分復元やダンプのクリーンアップを推奨します。詳細手順は [`docs/backup-restore.md`](docs/backup-restore.md) へ移動可能です。
 
 ## マイグレーション
 - Alembic を使用。エントリポイントで `alembic stamp head` → `alembic upgrade head` を実行します。
 
-詳しい手順や CI/統合テストでの利用例は `docs/migration.md` を参照してください。
+詳しい手順や CI/統合テストでの利用例は [`docs/migration.md`](docs/migration.md) を参照してください。
 
 ## 監査（Audit）概要
 - 操作ログは `item_audit` テーブルへ記録。`POST /items` で同期的に監査レコードを作成します。  
 - 保存される主な項目: `item_id`, `action`, `payload`, `user_id`, `ip`, `method`, `user_agent`, `request_path`。  
-- 実装上の変更点: 手書き SQL から SQLAlchemy Core の `insert().values(...).returning(...)` に移行し、パラメータのバインドと型の問題を回避しています。詳細なバックフィル手順は `docs/audit-backfill.md` に移すことを推奨します。
+- 実装上の変更点: 手書き SQL から SQLAlchemy Core の `insert().values(...).returning(...)` に移行し、パラメータのバインドと型の問題を回避しています。詳細なバックフィル手順は [`docs/audit-backfill.md`](docs/audit-backfill.md) に移すことを推奨します。
 
 ## ログ回転（概要）
 - `entrypoint.sh` が `/app/logs` 内の `*.log` を簡易ローテーションします（gzip圧縮、タイムスタンプ付与）。  
 - 環境変数で閾値と保持数を設定可能（例: `STARTUP_ROTATE_MAX_BYTES`, `STARTUP_ROTATE_KEEP`, `STARTUP_ROTATE_INTERVAL`）。本番では専用ツールの使用を推奨します。
 
-詳細な実装とローカルでのテスト手順は `docs/log-rotation.md` を参照してください。
+詳細な実装とローカルでのテスト手順は [`docs/log-rotation.md`](docs/log-rotation.md) を参照してください。
 
 ## 検証/テスト（最小コマンド例）
 - コンテナ内でインポート確認:
@@ -59,15 +59,14 @@ docker compose -f .\compose.yaml exec backend python -c "import app.main; print(
 ```
 docker compose -f .\compose.yaml exec backend python -c "import http.client, json; conn=http.client.HTTPConnection('127.0.0.1',8000); conn.request('POST','/items', json.dumps({'name':'refactor-check'}), {'Content-Type':'application/json','X-User-Id':'verify-user'}); print(conn.getresponse().status)"
 ```
-
-- 統合テストや追加の検証コマンドは `docs/testing.md` へ移行推奨。
-詳細なユニット／統合テストの手順、テスト用 DB の作成や削除、CI の例は `docs/testing.md` を参照してください。
+-- 統合テストや追加の検証コマンドは  [`docs/testing.md`](docs/testing.md) へ移行推奨。
+詳細なユニット／統合テストの手順、テスト用 DB の作成や削除、CI の例は [`docs/testing.md`](docs/testing.md) を参照してください。
 
 ## CI / 運用メモ（短く）
 - `.github/workflows/ci.yml` に `unit-tests` と `integration-tests` を配置。テスト DB の設定やデバッグ手順は CI 内の注釈を参照してください。  
 - 機密情報は `compose.yaml` に直書きしないで、`Secrets` または専用管理を利用してください。
 
-CI の失敗時のログ収集やローカルでの再現手順は `docs/ci-debug.md` を参照してください。
+CI の失敗時のログ収集やローカルでの再現手順は [`docs/ci-debug.md`](docs/ci-debug.md) を参照してください。
 
 ## 開発環境（補足）
 - `pydantic-settings` があれば型付き設定を利用します。なくても環境変数ベースで動作します。詳細は `backend/.env.example`。
@@ -84,4 +83,4 @@ CI の失敗時のログ収集やローカルでの再現手順は `docs/ci-debu
 
 
 ## 参考情報
-- VibeCoding のチャット保存については `docs/vibe-save.md` を参照してください。
+- VibeCoding のチャット保存については [`docs/vibe-save.md`](docs/vibe-save.md) を参照してください。

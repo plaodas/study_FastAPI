@@ -1,6 +1,6 @@
 # Backend 開発メモ
 
-このファイルはバックエンド固有の開発・マイグレーション・テスト手順をまとめた簡易ドキュメントです。詳細なテスト手順は `../docs/testing.md` を参照してください。
+このファイルはバックエンド固有の開発・マイグレーション・テスト手順をまとめた簡易ドキュメントです。詳細なテスト手順は [`../docs/testing.md`](../docs/testing.md) を参照してください。
 
 起動（ローカル・Docker）
 
@@ -36,7 +36,7 @@ docker compose -f .\compose.yaml exec backend sh -c "alembic stamp head && alemb
 - `STARTUP_ROTATE_MAX_BYTES`, `STARTUP_ROTATE_KEEP`, `STARTUP_ROTATE_INTERVAL` — ログ回転設定
 
 テスト
-- ユニット/統合テストの詳細は `../docs/testing.md` を参照してください。
+- ユニット/統合テストの詳細は [`../docs/testing.md`](../docs/testing.md) を参照してください。
 
 デバッグのコツ
 - モジュールのインポート確認: `python -c "import app.main; print('IMPORT_OK')"` をコンテナ内で実行して下さい。
