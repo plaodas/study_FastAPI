@@ -13,6 +13,9 @@ on:
       - 'backend/**'
       - '.github/**'
   pull_request:
+    # Explicitly include the `labeled` type so adding the `run-integration` label
+    # will trigger the workflow.
+    types: [opened, synchronize, reopened, labeled]
     branches: [ main ]
     # limit PR CI runs to PRs that touch backend or workflow files
     paths:
