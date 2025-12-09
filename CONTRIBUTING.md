@@ -31,13 +31,10 @@
   - pull_request で `run-integration` ラベルが付与されている場合
 - CI は `TEST_POSTGRES_DSN` を参照して Postgres テストを実行します。機密情報は GitHub Secrets / CI 環境で管理してください。`compose.test.yml` の値は例示です。
 
+- `compose.test.yml` のデフォルト設定では、`TEST_POSTGRES_DSN` はルート `.env` に定義された `POSTGRES_USER` / `POSTGRES_PASSWORD` を参照して生成されるようになっています。ローカルで統合テストを実行する際はルートの `.env` を Compose が読み取るようにし、`POSTGRES_USER` / `POSTGRES_PASSWORD` が Compose サービスと一致していることを確認してください。これによりテスト時の認証ミスマッチを避けられます。
+
 ## よくある問題と対処
 - psycopg2 の import エラー: `backend/requirements.txt` に `psycopg2-binary` が含まれていることを確認してください。CI では `libpq-dev` 等のシステムパッケージも必要になります（Workflow に記載済み）。
 - 接続エラー: ホスト名（`db` / `localhost`）、ポート、ユーザ名／パスワードを Compose 設定や CI のサービス設定に合わせてください。
 - テーブルが見つからない: 本テストは `item_audit` テーブルを自動で作成するコードを含みますが、他のテストは Alembic マイグレーションを前提にしている可能性があります。その場合は `alembic upgrade head` を実行してください。
 
-## さらに助けが必要な場合
-テスト実行でエラーが出たら、該当する pytest 出力や CI のログ（抜粋）をこの PR に貼ってください。こちらで解析して修正案を出します。
-
----
-短い手順と注意点に絞っています。必要なら実行スクリプトやラベル自動追加用 GitHub Action のテンプレートも追加できます。

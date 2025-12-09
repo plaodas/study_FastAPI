@@ -50,3 +50,12 @@ docker compose -f .\compose.yaml exec backend sh -c "alembic stamp head && alemb
 	- アプリのランタイム設定（ロギング、認証、アプリ固有のフラグ等）は `backend/.env` に置く。
 	- 単一ファイルにまとめたい場合は、`compose.yaml` でルート `.env` を `/app/.env` にマウントするか、`ENV_FILE` を適切に設定してください（機密管理に注意）。
 
+**監査 API (Audit)**
+
+- **概要**: 監査レコードを挿入する内部ユーティリティは、呼び出し元が挿入結果を扱いやすいように構造化された戻り値 (`AuditInsertResult`) と、明示的に失敗を伝える例外 (`AuditError`) を返すように変更されました。
+- **主要フィールド**: `AuditInsertResult` は少なくとも **`success`** (bool) と **`id`** (挿入された行の主キー、存在する場合) を持ちます。テストや呼び出しで `return_row=True` を指定すると、挿入された行の内容（辞書形式）が追加で含まれます。
+- **動作オプション**:
+  - `fail_silent` (デフォルト: `True`) — 挿入に失敗しても例外を投げず、`success=False` の結果を返します。`fail_silent=False` にすると失敗時に `AuditError` を投げます。
+  - `return_row` (デフォルト: `False`) — 挿入後に挿入行を取得して結果に含めます。Postgres 環境では `RETURNING` を使い高速に取得し、SQLite 等ではフォールバックで取得します。
+- **開発者向け注意**: この変更に伴いテストでは `AuditInsertResult.success` や `AuditInsertResult.id` をアサートするように更新されています。呼び出し元でエラーを明示的に扱いたい場合は `fail_silent=False` を指定してください。
+
