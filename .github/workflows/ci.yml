@@ -75,10 +75,9 @@ jobs:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: pass
           POSTGRES_DB: appdb_test
-        # expose container port so the runner can reach Postgres on localhost
+        # map Postgres container port to runner localhost:5432
         ports:
           - 5432:5432
-        # do not expose additional host-facing ports beyond what's needed
         options: >-
           --health-cmd="pg_isready -U user -d appdb_test"
           --health-interval=5s --health-timeout=5s --health-retries=10

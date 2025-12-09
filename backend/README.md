@@ -40,7 +40,7 @@ docker compose -f .\compose.yaml exec backend sh -c "alembic stamp head && alemb
 
 デバッグのコツ
 - モジュールのインポート確認: `python -c "import app.main; print('IMPORT_OK')"` をコンテナ内で実行して下さい。
- - モジュールのインポート確認: `python -c "import app.main; print('IMPORT_OK')"` をコンテナ内で実行して下さい。
+ 
 
 環境ファイルに関する注意
 
