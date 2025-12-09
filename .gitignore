@@ -57,6 +57,7 @@ Thumbs.db
 db/backups/*
 !db/backups/latest.sql
 db/backups/archive/
+*.bak
 
 # Misc
 *.dump
