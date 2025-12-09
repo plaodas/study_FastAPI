@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
 from sqlalchemy import Table, MetaData, text, inspect, Column, Integer, String, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -13,7 +16,9 @@ def _get_or_create_audit_table(engine):
 
     Caches per-engine to avoid repeated reflection/creation.
     """
-    key = getattr(engine, "url", None) or id(engine)
+    # Use engine identity to avoid collisions between distinct Engine
+    # objects that may share the same URL (e.g. multiple in-memory sqlite engines).
+    key = id(engine)
     if key in _audit_table_cache:
         return _audit_table_cache[key]
 
@@ -46,12 +51,31 @@ def _get_or_create_audit_table(engine):
     return audit_table
 
 
-def insert_audit(db, engine, db_item, payload_metadata: dict):
-    """Insert an audit row for the given item and return the new id when available.
+@dataclass
+class AuditInsertResult:
+    success: bool
+    id: Optional[int] = None
+    row: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
-    Uses a short-lived session bound to `engine`. On PostgreSQL the function
-    attempts to use `RETURNING` to obtain the new id; on other dialects it falls
-    back to a safe query after commit.
+
+class AuditError(Exception):
+    """Raised when an audit insertion should fail loudly."""
+
+
+def insert_audit(db, engine, db_item, payload_metadata: dict, *, fail_silent: bool = True, return_row: bool = False) -> AuditInsertResult:
+    """Insert an audit row and return an AuditInsertResult.
+
+    Parameters:
+    - db: existing DB/session object (not used for insert but kept for API compatibility)
+    - engine: SQLAlchemy Engine to use for the insert
+    - db_item: the item object containing an `id` attribute
+    - payload_metadata: dict payload to store in `payload` column
+    - fail_silent: when False, raise `AuditError` on failure; when True return result with success=False
+    - return_row: when True, return the inserted row as `row` (dict) when available
+
+    Maintains previous behavior: prefers Postgres `RETURNING` for id retrieval and
+    falls back to a deterministic select for other dialects.
     """
     logger = logging.getLogger(__name__)
 
@@ -62,9 +86,13 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
 
     try:
         audit_table = _get_or_create_audit_table(engine)
-    except Exception:
-        logging.getLogger(__name__).exception("Failed to ensure item_audit table")
-        return None
+    except Exception as exc:
+        msg = "Failed to ensure item_audit table: %s" % (exc,)
+        logging.getLogger(__name__).exception(msg)
+        result = AuditInsertResult(success=False, error=msg)
+        if not fail_silent:
+            raise AuditError(msg)
+        return result
 
     insert_values = {
         "item_id": getattr(db_item, "id", None),
@@ -78,6 +106,7 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
 
     Session = sessionmaker(bind=engine)
     new_audit_id = None
+    inserted_row = None
     try:
         with Session() as s:
             try:
@@ -88,25 +117,39 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
 
             ins = audit_table.insert().values(**insert_values)
 
-            # Prefer RETURNING on Postgres to get the inserted id
+            # Prefer RETURNING on Postgres to get the inserted id (and optionally the row)
             if engine.dialect.name == "postgresql":
                 try:
-                    ins = ins.returning(audit_table.c.id)
-                    result = s.execute(ins)
-                    new_audit_id = result.scalar_one_or_none()
+                    if return_row:
+                        ins = ins.returning(*audit_table.c)
+                        result = s.execute(ins)
+                        row = result.mappings().fetchone()
+                        if row:
+                            inserted_row = dict(row)
+                            new_audit_id = inserted_row.get("id")
+                    else:
+                        ins = ins.returning(audit_table.c.id)
+                        result = s.execute(ins)
+                        new_audit_id = result.scalar_one_or_none()
                     s.commit()
-                except Exception:
+                except Exception as exc:
                     s.rollback()
                     logger.exception("Postgres audit INSERT failed")
-                    new_audit_id = None
+                    err = f"Postgres INSERT failed: {exc}"
+                    if not fail_silent:
+                        raise AuditError(err)
+                    return AuditInsertResult(success=False, id=None, row=None, error=err)
             else:
                 try:
                     s.execute(ins)
                     s.commit()
-                except Exception:
+                except Exception as exc:
                     s.rollback()
                     logger.exception("Audit INSERT failed")
-                    return None
+                    err = f"Audit INSERT failed: {exc}"
+                    if not fail_silent:
+                        raise AuditError(err)
+                    return AuditInsertResult(success=False, id=None, row=None, error=err)
 
                 # best-effort: fetch last id deterministically
                 try:
@@ -136,14 +179,29 @@ def insert_audit(db, engine, db_item, payload_metadata: dict):
 
     except SQLAlchemyError:
         logger.exception("SQLAlchemyError during audit insertion")
-        new_audit_id = None
+        if not fail_silent:
+            raise AuditError("SQLAlchemyError during audit insertion")
+        return AuditInsertResult(success=False, id=None, row=None, error="SQLAlchemyError during audit insertion")
     except Exception:
         logger.exception("Unexpected exception during audit insertion")
-        new_audit_id = None
+        if not fail_silent:
+            raise AuditError("Unexpected exception during audit insertion")
+        return AuditInsertResult(success=False, id=None, row=None, error="Unexpected exception during audit insertion")
+
+    # Optionally fetch the full row for non-postgres case when requested
+    if return_row and inserted_row is None and new_audit_id is not None:
+        try:
+            with engine.connect() as conn:
+                sel = select(audit_table).where(audit_table.c.id == new_audit_id)
+                row = conn.execute(sel).mappings().fetchone()
+                if row:
+                    inserted_row = dict(row)
+        except Exception:
+            logger.exception("Failed to fetch inserted audit row")
 
     try:
         logger.info("insert_audit finished for item_id=%s", insert_values.get("item_id"))
     except Exception:
         pass
 
-    return new_audit_id
+    return AuditInsertResult(success=True, id=new_audit_id, row=inserted_row, error=None)

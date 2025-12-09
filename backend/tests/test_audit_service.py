@@ -6,6 +6,7 @@ connection is reused across SQLAlchemy engines/sessions in the test process.
 """
 from sqlalchemy import create_engine, MetaData, Table, select
 from sqlalchemy.pool import StaticPool
+import pytest
 
 from app.services import audit as audit_service
 
@@ -27,10 +28,11 @@ def test_insert_audit_sqlite():
     dummy = DummyItem(42, "widget")
     payload = {"name": "widget", "user_id": "tester", "ip": "127.0.0.1"}
 
-    new_id = audit_service.insert_audit(None, engine, dummy, payload)
+    result = audit_service.insert_audit(None, engine, dummy, payload)
 
-    # Our implementation attempts to return the new id for SQLite as an int.
-    assert isinstance(new_id, int)
+    # Our implementation now returns an AuditInsertResult
+    assert getattr(result, "success", False) is True
+    assert isinstance(result.id, int)
 
     # reflect table and assert the row exists
     meta = MetaData()
@@ -45,3 +47,26 @@ def test_insert_audit_sqlite():
     assert item_id == 42
     # payload may be stored as JSON/text depending on dialect; ensure content present
     assert "widget" in str(payload_col)
+
+
+def test_insert_audit_sqlite_return_row_and_error():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    dummy = DummyItem(43, "widget2")
+    payload = {"name": "widget2", "user_id": "tester2"}
+
+    # request the full row back
+    res = audit_service.insert_audit(None, engine, dummy, payload, return_row=True)
+    assert res.success is True
+    assert isinstance(res.id, int)
+    assert isinstance(res.row, dict)
+    assert res.row.get("item_id") == 43
+
+    # error case: pass an invalid engine and expect AuditError when fail_silent=False
+    bad_engine = object()
+    with pytest.raises(audit_service.AuditError):
+        audit_service.insert_audit(None, bad_engine, dummy, {}, fail_silent=False)

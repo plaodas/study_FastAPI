@@ -23,6 +23,7 @@ if not TEST_DSN:
 
 
 def test_insert_audit_postgres_returning_and_backfill():
+    print("Using TEST_POSTGRES_DSN:", TEST_DSN)
     engine = create_engine(TEST_DSN)
 
     # ensure table exists
@@ -39,9 +40,10 @@ def test_insert_audit_postgres_returning_and_backfill():
 
     # Now call insert_audit which on Postgres should use RETURNING for its own insert
     dummy = type("D", (), {"id": 2})()
-    new_id = audit_service.insert_audit(None, engine, dummy, {})
+    res = audit_service.insert_audit(None, engine, dummy, {})
 
-    assert isinstance(new_id, int), "insert_audit should return new id on Postgres"
+    assert getattr(res, "success", False) is True, "insert_audit should succeed on Postgres"
+    assert isinstance(res.id, int), "insert_audit should return new id on Postgres"
 
     # The earlier-manual row should have been backfilled by the function's post-insert SQL
     with engine.connect() as conn:
