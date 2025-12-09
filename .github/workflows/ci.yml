@@ -68,8 +68,10 @@ jobs:
       # Provide DSN explicitly so Postgres-specific tests can read it.
       TEST_POSTGRES_DSN: postgresql+psycopg2://user:pass@localhost:5432/appdb_test
     needs: unit-tests
-    # Run integration tests only on pushes to main (avoid heavy PR runs)
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/main') }}
+    # Run on push or manual dispatch, or on pull_request only when the label
+    # `run-integration` is present. This avoids running heavy integration jobs
+    # on every PR unless explicitly requested by adding the label.
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-integration')) }}
     services:
       postgres:
         image: postgres:15
