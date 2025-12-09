@@ -5,7 +5,30 @@ import json
 from typing import List, Tuple
 
 from app.utils import sanitize
-from app.config import settings
+import app.config as conf
+
+
+class _SettingsProxy:
+    """Proxy object that delegates attribute access to `app.config.settings`.
+
+    This lets other modules assign to `vmod.settings.<attr>` in tests or runtime
+    and have the changes reflected in the central `app.config.settings` object.
+    """
+    def __getattr__(self, name):
+        s = getattr(conf, "settings", None)
+        if s is None:
+            raise AttributeError(name)
+        return getattr(s, name)
+
+    def __setattr__(self, name, value):
+        s = getattr(conf, "settings", None)
+        if s is None:
+            # fallback: set attribute on this proxy
+            return object.__setattr__(self, name, value)
+        return setattr(s, name, value)
+
+
+settings = _SettingsProxy()
 
 
 def _get_config_from_settings() -> Tuple[List[str], List[Tuple[str, str]]]:
@@ -29,17 +52,26 @@ def _get_config_from_settings() -> Tuple[List[str], List[Tuple[str, str]]]:
     try:
         raw = getattr(settings, "VALIDATION_RULES", None)
         if raw:
+            # Accept several input shapes: string, list of strings, or list of tuples
             if isinstance(raw, str):
                 parts = [p.strip() for p in raw.split(";") if p.strip()]
+                for p in parts:
+                    if ":" in p:
+                        path, method = p.split(":", 1)
+                        rules.append((path.strip(), method.strip().upper()))
             elif isinstance(raw, (list, tuple)):
-                parts = [str(p).strip() for p in raw if str(p).strip()]
+                for entry in raw:
+                    # tuple/list like (path, method)
+                    if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                        rules.append((str(entry[0]).strip(), str(entry[1]).strip().upper()))
+                    else:
+                        s = str(entry).strip()
+                        if ":" in s:
+                            path, method = s.split(":", 1)
+                            rules.append((path.strip(), method.strip().upper()))
             else:
-                parts = []
-
-            for p in parts:
-                if ":" in p:
-                    path, method = p.split(":", 1)
-                    rules.append((path.strip(), method.strip().upper()))
+                # unknown format -> ignore
+                pass
     except Exception:
         rules = []
 
