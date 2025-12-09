@@ -29,17 +29,26 @@ def _get_config_from_settings() -> Tuple[List[str], List[Tuple[str, str]]]:
     try:
         raw = getattr(settings, "VALIDATION_RULES", None)
         if raw:
+            # Accept several input shapes: string, list of strings, or list of tuples
             if isinstance(raw, str):
                 parts = [p.strip() for p in raw.split(";") if p.strip()]
+                for p in parts:
+                    if ":" in p:
+                        path, method = p.split(":", 1)
+                        rules.append((path.strip(), method.strip().upper()))
             elif isinstance(raw, (list, tuple)):
-                parts = [str(p).strip() for p in raw if str(p).strip()]
+                for entry in raw:
+                    # tuple/list like (path, method)
+                    if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                        rules.append((str(entry[0]).strip(), str(entry[1]).strip().upper()))
+                    else:
+                        s = str(entry).strip()
+                        if ":" in s:
+                            path, method = s.split(":", 1)
+                            rules.append((path.strip(), method.strip().upper()))
             else:
-                parts = []
-
-            for p in parts:
-                if ":" in p:
-                    path, method = p.split(":", 1)
-                    rules.append((path.strip(), method.strip().upper()))
+                # unknown format -> ignore
+                pass
     except Exception:
         rules = []
 

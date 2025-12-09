@@ -39,6 +39,34 @@ def _env_list(name: str, default: List[str]) -> List[str]:
     return [p.strip() for p in val.split(",") if p.strip()]
 
 
+def _parse_validation_rules(raw) -> List[tuple]:
+    """Parse VALIDATION_RULES from a string or list into List[(path, METHOD)].
+
+    Accepts forms like:
+    - "'/items:POST;/items/*:PUT'"
+    - ["/items:POST", "/other:GET"]
+    Returns list of tuples (path_pattern, method_upper).
+    """
+    rules = []
+    if not raw:
+        return rules
+    try:
+        if isinstance(raw, str):
+            parts = [p.strip() for p in raw.split(";") if p.strip()]
+        elif isinstance(raw, (list, tuple)):
+            parts = [str(p).strip() for p in raw if str(p).strip()]
+        else:
+            return []
+
+        for p in parts:
+            if ":" in p:
+                path, method = p.split(":", 1)
+                rules.append((path.strip(), method.strip().upper()))
+    except Exception:
+        return []
+    return rules
+
+
 if _USE_PYDANTIC:
     class Settings(BaseSettings):
         PROJECT_NAME: str = "study_FastAPI"
@@ -155,6 +183,12 @@ if _USE_PYDANTIC:
             FORBIDDEN_WORDS: List[str] = _env_list("FORBIDDEN_WORDS", [])
 
         settings = SimpleSettings()
+    # normalize VALIDATION_RULES into a parsed list of (path, METHOD)
+    try:
+        parsed = _parse_validation_rules(getattr(settings, "VALIDATION_RULES", None))
+        setattr(settings, "VALIDATION_RULES", parsed)
+    except Exception:
+        pass
 else:
     class Settings:
         PROJECT_NAME: str = os.getenv("PROJECT_NAME", "study_FastAPI")
@@ -171,3 +205,8 @@ else:
 
 
     settings = Settings()
+    try:
+        parsed = _parse_validation_rules(getattr(settings, "VALIDATION_RULES", None))
+        setattr(settings, "VALIDATION_RULES", parsed)
+    except Exception:
+        pass

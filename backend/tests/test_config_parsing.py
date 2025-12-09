@@ -34,7 +34,12 @@ def test_settings_parses_env_vars(monkeypatch):
     else:
         assert "spam" in fw
 
-    assert getattr(s, "VALIDATION_RULES", "") == "/items:POST"
+    vr = getattr(s, "VALIDATION_RULES", "")
+    # VALIDATION_RULES may be normalized to a parsed list of tuples by config
+    if isinstance(vr, str):
+        assert vr == "/items:POST"
+    else:
+        assert vr == [("/items", "POST")]
 
     # testing flag
     assert bool(getattr(s, "TESTING", False)) is True
